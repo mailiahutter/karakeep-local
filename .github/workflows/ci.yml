@@ -1,0 +1,37 @@
+name: Tests
+
+on:
+  push:
+    branches: ["**"]
+    tags-ignore: ["**"]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - run: npm ci
+
+      - name: Vérifier les types de l'application
+        run: npx tsc --noEmit
+
+      - name: Vérifier les types des tests
+        run: npx tsc --noEmit -p tsconfig.test.json
+
+      - name: Lancer les tests
+        run: node --experimental-strip-types --test "src/**/*.test.ts"
+
+      # Détecte tôt une incompatibilité de plugin de configuration ou de
+      # manifeste, sans payer un build Gradle complet.
+      - name: Vérifier la génération du projet Android
+        env:
+          APP_VERSION: 0.0.0
+          APP_VERSION_CODE: 1
+        run: npx expo prebuild --platform android --no-install

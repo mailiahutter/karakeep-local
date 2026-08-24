@@ -1,0 +1,15 @@
+{
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": true,
+    "noEmit": true,
+    // Les tests tournent sous `node --experimental-strip-types`, qui exige
+    // l'extension .ts explicite dans les imports.
+    "allowImportingTsExtensions": true,
+    // Cantonné à cette configuration : le code de l'application ne doit pas
+    // pouvoir utiliser les API Node, absentes de React Native.
+    "types": ["node"]
+  },
+  "include": ["src/**/*.test.ts", "src/**/*.ts"],
+  "exclude": ["node_modules"]
+}
