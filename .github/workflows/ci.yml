@@ -19,6 +19,11 @@ jobs:
 
       - run: npm ci
 
+      # En premier : une dépendance de pair absente casse le build Gradle trois
+      # minutes plus tard, ou seulement à l'exécution sur l'appareil.
+      - name: Vérifier les dépendances de pair
+        run: node scripts/check-peers.mjs
+
       - name: Vérifier les types de l'application
         run: npx tsc --noEmit
 
