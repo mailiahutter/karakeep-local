@@ -108,6 +108,13 @@ export default function SettingsScreen() {
             onPress={() => router.push("/settings/model")}
           />
 
+          <NavRow
+            icon="logo-instagram"
+            label="Compte Instagram"
+            hint="Sans session, Instagram masque légendes et carrousels."
+            onPress={() => router.push("/settings/instagram")}
+          />
+
           <ToggleRow
             label="Tagger automatiquement"
             hint="Génère des tags après chaque enregistrement."

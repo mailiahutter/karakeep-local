@@ -46,6 +46,10 @@ export default function RootLayout() {
           />
           <Stack.Screen name="settings/model" options={{ title: "Modèle IA" }} />
           <Stack.Screen
+            name="settings/instagram"
+            options={{ title: "Compte Instagram" }}
+          />
+          <Stack.Screen
             name="settings/update"
             options={{ title: "Mise à jour" }}
           />

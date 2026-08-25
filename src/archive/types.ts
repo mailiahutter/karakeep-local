@@ -23,6 +23,12 @@ export interface RenderedPage {
   content: string;
   images: CapturedImage[];
   videos: CapturedVideo[];
+  /** Instagram : légende réelle, si la page en a servi une. */
+  igCaption?: string | null;
+  /** Instagram : la phrase « N likes, M comments », à ne pas confondre. */
+  igOgDescription?: string | null;
+  /** YouTube : durée en secondes. */
+  durationSec?: number;
 }
 
 export interface ArchiveResult {

@@ -223,30 +223,61 @@ export function buildInjectedScript(opts: ArchiveOptions): string {
   function instagramExtras() {
     var out = {};
     var media = [];
-    // Instagram sert bien les og: sur les publications publiques : c'est ce qui
-    // alimente les aperçus de lien, et c'est la voie la plus stable.
-    var ogVideo = meta(['og:video', 'og:video:secure_url']);
-    if (ogVideo) media.push({ url: absolute(ogVideo), kind: 'file', isVideo: true });
 
-    // Carrousel : les <img> et <video> rendus dans l'article.
+    // Page d'intégration (/embed/captioned/) : la légende y est en clair dans
+    // .Caption, et l'image dans .EmbeddedMediaImage. C'est la seule voie qui
+    // fonctionne sans compte.
+    var capEl = document.querySelector('.Caption, ._a9zs, [data-testid="post-comment-root"]');
+    if (capEl) {
+      var clone = capEl.cloneNode(true);
+      // Le nom du compte et l'horodatage sont des liens : on les retire pour
+      // ne garder que le texte écrit par l'auteur.
+      var links = clone.querySelectorAll('.CaptionUsername, .CaptionComments, time');
+      for (var q = 0; q < links.length; q++) {
+        if (links[q].parentNode) links[q].parentNode.removeChild(links[q]);
+      }
+      var txt = (clone.innerText || clone.textContent || '').trim();
+      if (txt) out.caption = txt;
+    }
+
+    var embedded = document.querySelectorAll('.EmbeddedMediaImage, img.FFVAD, article img');
+    for (var e = 0; e < embedded.length; e++) {
+      var es = embedded[e].currentSrc || embedded[e].src;
+      if (es && es.indexOf('data:') !== 0) {
+        media.push({
+          url: absolute(es), isVideo: false,
+          width: embedded[e].naturalWidth || 0, height: embedded[e].naturalHeight || 0
+        });
+      }
+    }
+
+    // Carrousel sur la page normale (si une session est ouverte).
     var art = document.querySelector('article') || document;
     var imgs = art.querySelectorAll('img[srcset], img[src]');
     for (var i = 0; i < imgs.length; i++) {
-      var s = imgs[i].currentSrc || imgs[i].src;
-      if (!s || s.indexOf('data:') === 0) continue;
-      if (imgs[i].naturalWidth < 300) continue;
-      media.push({ url: absolute(s), kind: 'image', isVideo: false });
+      var s2 = imgs[i].currentSrc || imgs[i].src;
+      if (!s2 || s2.indexOf('data:') === 0) continue;
+      media.push({
+        url: absolute(s2), isVideo: false,
+        width: imgs[i].naturalWidth || 0, height: imgs[i].naturalHeight || 0
+      });
     }
+
+    var ogVideo = meta(['og:video', 'og:video:secure_url']);
+    if (ogVideo) media.push({ url: absolute(ogVideo), isVideo: true, width: 0, height: 0 });
     var vids = art.querySelectorAll('video');
     for (var j = 0; j < vids.length; j++) {
       var vs = vids[j].currentSrc || vids[j].src;
-      if (vs && vs.indexOf('blob:') !== 0) media.push({ url: absolute(vs), kind: 'file', isVideo: true });
+      if (vs && vs.indexOf('blob:') !== 0) {
+        media.push({ url: absolute(vs), isVideo: true, width: 0, height: 0 });
+      }
     }
-    out.media = media;
 
-    // La légende : og:description la contient, sinon on la cherche dans le DOM.
-    var cap = meta(['og:description']);
-    if (cap) out.description = cap;
+    out.media = media;
+    // og:description n'est PAS la légende chez Instagram : c'est « N likes,
+    // M comments - ... ». On la renvoie séparément pour que l'application
+    // puisse la reconnaître et l'écarter.
+    out.ogDescription = meta(['og:description']);
     return out;
   }
 
@@ -275,13 +306,15 @@ export function buildInjectedScript(opts: ArchiveOptions): string {
       if (yt.description) base.content = yt.description;
     } else if (OPTS.sourceKind === 'instagram') {
       var ig = instagramExtras();
-      if (ig.description) { base.description = ig.description; base.content = ig.description; }
+      base.igCaption = ig.caption || null;
+      base.igOgDescription = ig.ogDescription || null;
+      if (ig.caption) { base.description = ig.caption; base.content = ig.caption; }
       if (ig.media && ig.media.length) {
         for (var k = 0; k < ig.media.length; k++) {
           var m = ig.media[k];
           if (!m.url) continue;
           if (m.isVideo) base.videos.push({ url: m.url, kind: 'file' });
-          else base.images.push({ url: m.url, width: 0, height: 0, alt: null });
+          else base.images.push({ url: m.url, width: m.width || 0, height: m.height || 0, alt: null });
         }
       }
     }
