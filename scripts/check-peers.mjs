@@ -67,6 +67,33 @@ function collectInstalled() {
   return installed;
 }
 
+/**
+ * Vérifie qu'aucune dépendance native n'utilise une API Gradle supprimée.
+ *
+ * `jcenter()` a disparu de Gradle 9. Une bibliothèque non maintenue qui
+ * l'appelle fait échouer le build natif après trois minutes, avec un message
+ * qui ne dit pas d'où vient le paquet fautif. Le repérer ici prend une seconde.
+ */
+function checkGradleFiles(installed) {
+  const dead = [];
+  for (const name of installed) {
+    const gradle = path.join(ROOT, name, "android", "build.gradle");
+    let text;
+    try {
+      text = fs.readFileSync(gradle, "utf8");
+    } catch {
+      continue;
+    }
+    // Les lignes commentées ne gênent pas le build.
+    const active = text
+      .split("\n")
+      .filter((l) => !l.trim().startsWith("//"))
+      .join("\n");
+    if (/\bjcenter\s*\(/.test(active)) dead.push({ name, api: "jcenter()" });
+  }
+  return dead;
+}
+
 const installed = collectInstalled();
 if (installed.size === 0) {
   console.error("node_modules introuvable — lance `npm ci` d'abord.");
@@ -90,8 +117,21 @@ for (const name of installed) {
   }
 }
 
+const deadGradle = checkGradleFiles(installed);
+if (deadGradle.length > 0) {
+  console.error("\nDépendance(s) native(s) utilisant une API Gradle supprimée :\n");
+  for (const { name, api } of deadGradle) {
+    console.error(`  ${name} appelle ${api}, retiré de Gradle 9`);
+  }
+  console.error(
+    "\nLe build natif échouera. Remplace ou retire ces paquets — ils ne sont " +
+      "plus maintenus.\n",
+  );
+  process.exit(1);
+}
+
 if (missing.size === 0) {
-  console.log("Dépendances de pair : aucune absence obligatoire.");
+  console.log("Dépendances : pairs obligatoires présents, Gradle compatible.");
   process.exit(0);
 }
 

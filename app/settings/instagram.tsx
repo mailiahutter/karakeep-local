@@ -3,7 +3,6 @@ import { useRouter } from "expo-router";
 import { useRef, useState } from "react";
 import { Alert, StyleSheet, Text, View } from "react-native";
 import { WebView } from "react-native-webview";
-import CookieManager from "@react-native-cookies/cookies";
 
 import { Button, Card, Row } from "../../src/ui/components";
 import { spacing, useTheme } from "../../src/ui/theme";
@@ -21,37 +20,37 @@ import { spacing, useTheme } from "../../src/ui/theme";
  * conserve rien.
  */
 const LOGIN_URL = "https://www.instagram.com/accounts/login/";
+const LOGOUT_URL = "https://www.instagram.com/accounts/logout/";
 
 export default function InstagramLoginScreen() {
   const t = useTheme();
   const router = useRouter();
   const [loggedIn, setLoggedIn] = useState(false);
-  const checked = useRef(false);
+  const [uri, setUri] = useState(LOGIN_URL);
+  // Pendant une déconnexion, Instagram redirige vers des adresses qui
+  // ressembleraient à une connexion réussie : on suspend la détection.
+  const signingOut = useRef(false);
 
-  const checkSession = async (url: string) => {
-    // Instagram redirige vers l'accueil une fois la session ouverte.
-    if (checked.current) return;
-    if (/instagram\.com\/(\?|$)|accounts\/onetap/.test(url)) {
-      checked.current = true;
-      try {
-        const cookies = await CookieManager.get("https://www.instagram.com");
-        if (cookies.sessionid?.value) {
-          setLoggedIn(true);
-        }
-      } catch {
-        // En cas de doute on laisse l'utilisateur juger au rendu.
-      }
-      checked.current = false;
+  // Instagram quitte /accounts/login/ dès que la session est ouverte : la
+  // navigation suffit à le détecter, sans lire le moindre cookie.
+  const checkSession = (url: string) => {
+    if (signingOut.current) {
+      // La page de connexion réaffichée signe la fin de la déconnexion.
+      if (url.includes("/accounts/login")) signingOut.current = false;
+      return;
+    }
+    if (/instagram\.com\/(\?|$)|accounts\/onetap|\/direct\//.test(url)) {
+      setLoggedIn(true);
     }
   };
 
-  const signOut = async () => {
-    await CookieManager.clearAll();
+  // Fermer la session côté Instagram invalide le cookie partagé avec le
+  // moteur d'archivage : inutile d'y toucher nous-mêmes. La WebView reste
+  // montée pour que l'adresse de déconnexion soit réellement chargée.
+  const signOut = () => {
+    signingOut.current = true;
     setLoggedIn(false);
-    Alert.alert(
-      "Session fermée",
-      "Les publications non publiques ne seront plus accessibles.",
-    );
+    setUri(LOGOUT_URL);
   };
 
   return (
@@ -77,7 +76,7 @@ export default function InstagramLoginScreen() {
             label="Fermer la session"
             icon="log-out-outline"
             variant="danger"
-            onPress={() => void signOut()}
+            onPress={signOut}
           />
         )}
         {loggedIn && (
@@ -87,8 +86,8 @@ export default function InstagramLoginScreen() {
 
       {!loggedIn && (
         <WebView
-          source={{ uri: LOGIN_URL }}
-          onNavigationStateChange={(nav) => void checkSession(nav.url)}
+          source={{ uri }}
+          onNavigationStateChange={(nav) => checkSession(nav.url)}
           javaScriptEnabled
           domStorageEnabled
           thirdPartyCookiesEnabled
