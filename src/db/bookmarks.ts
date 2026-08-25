@@ -235,6 +235,14 @@ export async function setArchived(id: string, value: boolean): Promise<void> {
   );
 }
 
+export async function setSummary(id: string, summary: string): Promise<void> {
+  const db = await getDb();
+  await db.runAsync(
+    "UPDATE bookmarks SET summary = ?, updated_at = ? WHERE id = ?",
+    [summary, Date.now(), id],
+  );
+}
+
 export async function setNote(id: string, note: string): Promise<void> {
   const db = await getDb();
   await db.runAsync(

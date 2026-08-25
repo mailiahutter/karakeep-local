@@ -1,14 +1,15 @@
-import { fetchPage, FetchPageError } from "../capture/fetchPage";
+import { captureBookmark } from "./capture";
 import { generateTags } from "../ai/tagging";
+import { generateSummary } from "../ai/summary";
 import { isModelInstalled } from "../ai/download";
 import { findModel } from "../ai/models";
 import { modelPathFor } from "../ai/download";
 import {
   getBookmark,
   pendingBookmarks,
-  saveExtractedContent,
   setAiStatus,
   setFetchStatus,
+  setSummary,
 } from "../db/bookmarks";
 import { attachTags } from "../db/tags";
 import { loadSettings } from "../db/settings";
@@ -53,15 +54,13 @@ async function runFetchStage(): Promise<number> {
 
   for (const bookmark of batch) {
     emit({ type: "fetching", bookmarkId: bookmark.id, url: bookmark.url });
-    await setFetchStatus(bookmark.id, "running");
     try {
-      const extracted = await fetchPage(bookmark.url);
-      await saveExtractedContent(bookmark.id, extracted);
+      const outcome = await captureBookmark(bookmark.id, bookmark.url);
+      for (const note of outcome.notes) {
+        emit({ type: "error", bookmarkId: bookmark.id, message: note });
+      }
     } catch (err) {
-      const message =
-        err instanceof FetchPageError
-          ? err.message
-          : `Extraction impossible : ${(err as Error).message}`;
+      const message = (err as Error).message;
       await setFetchStatus(bookmark.id, "error", message);
       emit({ type: "error", bookmarkId: bookmark.id, message });
     }
@@ -113,6 +112,18 @@ async function runTagStage(): Promise<number> {
       if (tags.length > 0) {
         await attachTags(bookmark.id, tags, "ai");
       }
+
+      // Le résumé suit le tagging : le modèle est déjà chargé en mémoire, la
+      // seconde inférence coûte donc bien moins que la première.
+      if (bookmark.content && bookmark.content.trim().length > 0) {
+        const summary = await generateSummary(
+          bookmark.title,
+          bookmark.content,
+          { modelPath, language: settings.aiLanguage },
+        );
+        if (summary) await setSummary(bookmark.id, summary);
+      }
+
       await setAiStatus(bookmark.id, "success");
     } catch (err) {
       const message = `Tagging impossible : ${(err as Error).message}`;

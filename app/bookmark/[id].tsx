@@ -19,6 +19,7 @@ import {
   setFavourite,
   setNote,
 } from "../../src/db/bookmarks";
+import { listAssets, type Asset } from "../../src/db/assets";
 import { attachTags, detachTag } from "../../src/db/tags";
 import type { Bookmark } from "../../src/db/types";
 import { hostLabel } from "../../src/db/urls";
@@ -37,12 +38,14 @@ export default function BookmarkScreen() {
   const [noteDraft, setNoteDraft] = useState("");
   const [tagDraft, setTagDraft] = useState("");
   const [retrying, setRetrying] = useState(false);
+  const [assets, setAssets] = useState<Asset[]>([]);
 
   const load = useCallback(async () => {
     if (!id) return;
     const found = await getBookmark(id);
     setBookmark(found);
     setNoteDraft(found?.note ?? "");
+    setAssets(found ? await listAssets(found.id) : []);
     setLoading(false);
   }, [id]);
 
@@ -114,6 +117,20 @@ export default function BookmarkScreen() {
         />
       </Row>
 
+      {bookmark.summary && (
+        <Card style={{ borderColor: t.accent }}>
+          <Row>
+            <Ionicons name="sparkles" size={16} color={t.accent} />
+            <Text style={[styles.sectionLabel, { color: t.accent }]}>
+              Résumé
+            </Text>
+          </Row>
+          <Text style={[styles.description, { color: t.text }]}>
+            {bookmark.summary}
+          </Text>
+        </Card>
+      )}
+
       {bookmark.description && (
         <Card>
           <Text style={[styles.description, { color: t.textMuted }]}>
@@ -121,6 +138,8 @@ export default function BookmarkScreen() {
           </Text>
         </Card>
       )}
+
+      {assets.length > 0 && <AssetsCard assets={assets} />}
 
       <Card>
         <Text style={[styles.sectionLabel, { color: t.textMuted }]}>Tags</Text>
@@ -267,7 +286,79 @@ export default function BookmarkScreen() {
   );
 }
 
+const ASSET_LABEL: Record<string, { icon: keyof typeof Ionicons.glyphMap; label: string }> = {
+  screenshot: { icon: "image-outline", label: "Capture d'écran" },
+  archive: { icon: "document-text-outline", label: "Page archivée" },
+  pdf: { icon: "document-outline", label: "PDF" },
+  image: { icon: "images-outline", label: "Image" },
+  video: { icon: "videocam-outline", label: "Vidéo" },
+};
+
+function formatSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} o`;
+  const units = ["Ko", "Mo", "Go"];
+  let v = bytes / 1024;
+  let u = 0;
+  while (v >= 1024 && u < units.length - 1) {
+    v /= 1024;
+    u++;
+  }
+  return `${v.toFixed(v >= 10 ? 0 : 1)} ${units[u]}`;
+}
+
+/**
+ * Ce qui a été conservé sur l'appareil. C'est cette liste qui garantit que le
+ * contenu survit à la disparition du site.
+ */
+function AssetsCard({ assets }: { assets: Asset[] }) {
+  const t = useTheme();
+  const images = assets.filter((a) => a.kind === "image" || a.kind === "screenshot");
+
+  return (
+    <Card>
+      <Text style={[styles.sectionLabel, { color: t.textMuted }]}>
+        Conservé sur l'appareil
+      </Text>
+
+      {images.length > 0 && (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          <View style={styles.thumbRow}>
+            {images.map((a) => (
+              <Image
+                key={a.id}
+                source={{ uri: a.path }}
+                style={[styles.thumb, { backgroundColor: t.surfaceAlt }]}
+                resizeMode="cover"
+              />
+            ))}
+          </View>
+        </ScrollView>
+      )}
+
+      {assets.map((a) => {
+        const meta = ASSET_LABEL[a.kind] ?? {
+          icon: "cube-outline" as const,
+          label: a.kind,
+        };
+        return (
+          <Row key={a.id}>
+            <Ionicons name={meta.icon} size={16} color={t.textMuted} />
+            <Text style={[styles.hint, { color: t.text, flex: 1 }]}>
+              {meta.label}
+            </Text>
+            <Text style={[styles.hint, { color: t.textFaint }]}>
+              {formatSize(a.bytes)}
+            </Text>
+          </Row>
+        );
+      })}
+    </Card>
+  );
+}
+
 const styles = StyleSheet.create({
+  thumbRow: { flexDirection: "row", gap: spacing.sm },
+  thumb: { width: 120, height: 90, borderRadius: radius.md },
   content: { padding: spacing.lg, gap: spacing.md, paddingBottom: spacing.xxl },
   missing: {
     flex: 1,

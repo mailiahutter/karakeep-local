@@ -1,3 +1,5 @@
+import type { SourceKind } from "../archive/sources";
+
 export type FetchStatus = "pending" | "running" | "success" | "error";
 export type AiStatus =
   | "pending"
@@ -28,6 +30,8 @@ export interface BookmarkRow {
   fetch_error: string | null;
   ai_status: AiStatus;
   ai_error: string | null;
+  summary: string | null;
+  source_kind: SourceKind;
 }
 
 export interface Tag {
@@ -57,6 +61,8 @@ export interface Bookmark {
   fetchError: string | null;
   aiStatus: AiStatus;
   aiError: string | null;
+  summary: string | null;
+  sourceKind: SourceKind;
   tags: Tag[];
 }
 
@@ -81,6 +87,8 @@ export function rowToBookmark(row: BookmarkRow, tags: Tag[] = []): Bookmark {
     fetchError: row.fetch_error,
     aiStatus: row.ai_status,
     aiError: row.ai_error,
+    summary: row.summary,
+    sourceKind: row.source_kind ?? "website",
     tags,
   };
 }

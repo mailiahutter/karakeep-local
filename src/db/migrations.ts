@@ -87,4 +87,48 @@ export const MIGRATIONS: string[] = [
     VALUES (new.id, new.title, new.description, new.content, new.url);
   END;
   `,
+
+  // 002 — pièces conservées, résumé généré, nature de la source.
+  `
+  CREATE TABLE assets (
+    id          TEXT PRIMARY KEY NOT NULL,
+    bookmark_id TEXT NOT NULL REFERENCES bookmarks(id) ON DELETE CASCADE,
+    -- screenshot | pdf | archive | image | video
+    kind        TEXT NOT NULL,
+    path        TEXT NOT NULL,
+    bytes       INTEGER NOT NULL DEFAULT 0,
+    source_url  TEXT,
+    created_at  INTEGER NOT NULL
+  );
+  CREATE INDEX idx_assets_bookmark ON assets(bookmark_id);
+
+  ALTER TABLE bookmarks ADD COLUMN summary TEXT;
+  -- website | youtube | instagram : conditionne l'extraction appliquée.
+  ALTER TABLE bookmarks ADD COLUMN source_kind TEXT NOT NULL DEFAULT 'website';
+
+  -- Le résumé doit être trouvable par la recherche au même titre que le texte.
+  DROP TRIGGER bookmarks_fts_insert;
+  DROP TRIGGER bookmarks_fts_update;
+
+  CREATE TRIGGER bookmarks_fts_insert AFTER INSERT ON bookmarks BEGIN
+    INSERT INTO bookmarks_fts(bookmark_id, title, description, content, url)
+    VALUES (new.id, new.title,
+            COALESCE(new.description, '') || ' ' || COALESCE(new.summary, ''),
+            new.content, new.url);
+  END;
+
+  CREATE TRIGGER bookmarks_fts_update AFTER UPDATE ON bookmarks BEGIN
+    DELETE FROM bookmarks_fts WHERE bookmark_id = old.id;
+    INSERT INTO bookmarks_fts(bookmark_id, title, description, content, url)
+    VALUES (new.id, new.title,
+            COALESCE(new.description, '') || ' ' || COALESCE(new.summary, ''),
+            new.content, new.url);
+  END;
+
+  -- Réindexe l'existant : les favoris déjà enregistrés doivent rester
+  -- trouvables après le changement de déclencheurs.
+  DELETE FROM bookmarks_fts;
+  INSERT INTO bookmarks_fts(bookmark_id, title, description, content, url)
+  SELECT id, title, COALESCE(description, ''), content, url FROM bookmarks;
+  `,
 ];

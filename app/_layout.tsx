@@ -4,6 +4,7 @@ import { ShareIntentProvider } from "expo-share-intent";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { useColorScheme } from "react-native";
 
+import { WebArchiver } from "../src/archive/WebArchiver";
 import { ShareIntentHandler } from "../src/ui/ShareIntentHandler";
 import { useTheme } from "../src/ui/theme";
 
@@ -23,6 +24,9 @@ export default function RootLayout() {
       <SafeAreaProvider>
         <StatusBar style={scheme === "dark" ? "light" : "dark"} />
         <ShareIntentHandler />
+        {/* Moteur de rendu hors écran : doit rester monté pour que la file
+            d'archivage soit consommée, quel que soit l'écran affiché. */}
+        <WebArchiver />
         <Stack
           screenOptions={{
             headerStyle: { backgroundColor: t.surface },

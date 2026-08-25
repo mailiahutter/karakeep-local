@@ -214,3 +214,55 @@ export function sanitizeTags(tags: string[], max = 8): string[] {
   }
   return out;
 }
+
+
+// --- Résumé ---------------------------------------------------------
+
+export const SUMMARY_SYSTEM_PROMPT =
+  "Tu es un assistant de synthèse documentaire. Tu réponds uniquement par le résumé demandé, sans préambule ni commentaire.";
+
+export interface SummaryOptions {
+  modelPath: string;
+  language: string;
+  /** Budget de caractères du contenu soumis au modèle. */
+  maxContentChars?: number;
+}
+
+export function buildSummaryPrompt(
+  title: string | null,
+  content: string,
+  language: string,
+  maxContentChars = 6000,
+): string {
+  const body = preprocessContent(
+    [title ? `Titre : ${title}` : "", content.slice(0, maxContentChars)]
+      .filter(Boolean)
+      .join("\n\n"),
+  );
+
+  return `Résume le DOCUMENT ci-dessous.
+
+Règles :
+- 3 à 4 phrases, pas davantage.
+- En ${language}.
+- Va droit au fond : ce que dit le document, pas ce qu'il est.
+- N'écris ni « Ce document… », ni « L'article explique… » : entre directement dans le sujet.
+- N'invente rien qui ne soit dans le texte.
+
+<DOCUMENT>
+${body}
+</DOCUMENT>`;
+}
+
+/** Retire les amorces bavardes qu'un petit modèle ajoute malgré la consigne. */
+export function cleanSummary(raw: string): string {
+  let out = raw.trim();
+  out = out.replace(/^```[a-z]*\s*|\s*```$/gi, "").trim();
+  out = out.replace(
+    /^(voici (un |le )?r[ée]sum[ée]\s*:?|r[ée]sum[ée]\s*:)\s*/i,
+    "",
+  );
+  out = out.replace(/^["«»\s]+|["«»\s]+$/g, "").trim();
+  return out;
+}
+
