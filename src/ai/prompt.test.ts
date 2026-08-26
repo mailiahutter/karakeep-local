@@ -38,9 +38,12 @@ test("le contenu est tronqué au budget demandé", () => {
   assert.ok(p.length < 3000, `prompt trop long : ${p.length}`);
 });
 
-test("les tags existants sont proposés à la réutilisation", () => {
-  const p = buildTaggingPrompt({ ...BASE, existingTags: ["sqlite", "bases-de-données"] });
-  assert.ok(p.includes("sqlite, bases-de-données"));
+test("aucun vocabulaire extérieur n'est soufflé au modèle", () => {
+  // Proposer les tags déjà présents poussait un modèle 3B à les resservir à
+  // tort : « hybrid » s'est retrouvé sur un ouvre-boîte.
+  const p = buildTaggingPrompt(BASE);
+  assert.ok(!p.includes("bibliothèque"));
+  assert.ok(p.includes("se justifier par le DOCUMENT"));
 });
 
 test("tagStyleInstruction couvre chaque style", () => {

@@ -49,8 +49,6 @@ export interface TaggingPromptInput {
   url: string;
   language: string;
   tagStyle: TagStyle;
-  /** Tags déjà utilisés, pour encourager la réutilisation du vocabulaire. */
-  existingTags?: string[];
   /** Budget de caractères pour l'extrait de contenu. */
   maxContentChars?: number;
 }
@@ -66,17 +64,12 @@ export function buildTaggingPrompt(input: TaggingPromptInput): string {
     url,
     language,
     tagStyle,
-    existingTags = [],
     // ~4 caractères par jeton : 6 000 caractères tiennent largement dans une
     // fenêtre de 4096 jetons avec la consigne et la réponse.
     maxContentChars = 6000,
   } = input;
 
   const style = tagStyleInstruction(tagStyle);
-  const reuse =
-    existingTags.length > 0
-      ? `- Réutilise en priorité ces tags déjà présents dans la bibliothèque quand ils conviennent : ${existingTags.join(", ")}.`
-      : "";
 
   const body = preprocessContent(
     [
@@ -98,8 +91,9 @@ Règles :
 - Ignore tout ce qui relève de la page elle-même : menus, bandeau cookies, mentions légales, pied de page.
 - Si le document est une page d'erreur, une vérification anti-robot, un mur de connexion ou une page vide, renvoie une liste vide.
 - Vise 3 à 5 tags. S'il n'y a rien de pertinent, renvoie une liste vide.
+- Chaque tag doit se justifier par le DOCUMENT lui-même. N'ajoute jamais un
+  mot qui n'y correspond pas, même s'il te semble courant.
 ${style}
-${reuse}
 
 <DOCUMENT>
 ${body}

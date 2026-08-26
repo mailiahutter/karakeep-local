@@ -1,5 +1,4 @@
 import type { Bookmark } from "../db/types";
-import { frequentTagNames } from "../db/tags";
 import { complete } from "./llm";
 import {
   SYSTEM_PROMPT,
@@ -33,8 +32,6 @@ export async function generateTags(
     return [];
   }
 
-  const existingTags = await frequentTagNames(30);
-
   const prompt = buildTaggingPrompt({
     title: bookmark.title,
     description: bookmark.description,
@@ -42,7 +39,6 @@ export async function generateTags(
     url: bookmark.url,
     language: opts.language,
     tagStyle: opts.tagStyle,
-    existingTags,
   });
 
   const raw = await complete(

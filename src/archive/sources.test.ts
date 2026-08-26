@@ -60,6 +60,20 @@ test("le plan YouTube vise la vidéo, pas l'archive de la page", () => {
     false,
     "archiver le squelette du lecteur n'aurait aucune valeur",
   );
+  assert.equal(
+    p.wantScreenshot,
+    false,
+    "la miniature montre mieux que la capture du lecteur",
+  );
+});
+
+test("les réseaux ne produisent pas de capture, les sites si", () => {
+  // La capture d'une page d'intégration ne montre que du cadre et du blanc,
+  // alors que les médias de la publication sont conservés tels quels.
+  assert.equal(planFor("instagram").wantScreenshot, false);
+  assert.equal(planFor("youtube").wantScreenshot, false);
+  // Sur un site, elle reste la seule trace de la mise en page.
+  assert.equal(planFor("website").wantScreenshot, true);
 });
 
 test("le plan Instagram attend plus longtemps et garde le carrousel", () => {

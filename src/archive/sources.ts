@@ -54,7 +54,9 @@ export function planFor(kind: SourceKind): SourcePlan {
         // Archiver le lecteur YouTube n'a aucun intérêt : la page est un
         // squelette et la vidéo n'y est pas.
         wantArchive: false,
-        wantScreenshot: true,
+        // Une capture du lecteur ne montre rien que la miniature ne montre
+        // mieux : elle n'ajouterait qu'un fichier inutile.
+        wantScreenshot: false,
         maxImages: 1, // la miniature
         wantVideo: true,
         extraSettleMs: 2000,
@@ -63,7 +65,10 @@ export function planFor(kind: SourceKind): SourcePlan {
       return {
         kind,
         wantArchive: false,
-        wantScreenshot: true,
+        // La capture ne montre que la page d'intégration, cadre et zones
+        // blanches comprises. Les images et la vidéo de la publication sont
+        // conservées telles quelles : la capture ferait doublon en moins bien.
+        wantScreenshot: false,
         maxImages: 10, // un carrousel peut en contenir plusieurs
         wantVideo: true,
         extraSettleMs: 3500, // chargement différé systématique
@@ -73,6 +78,8 @@ export function planFor(kind: SourceKind): SourcePlan {
       return {
         kind,
         wantArchive: true,
+        // Sur un site, la capture est la trace visuelle de la mise en page :
+        // elle garde une valeur propre si le site disparaît.
         wantScreenshot: true,
         maxImages: 2, // une à deux illustrations, comme demandé
         wantVideo: false,
