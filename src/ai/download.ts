@@ -42,9 +42,28 @@ export interface ModelDownload {
 export async function isModelInstalled(
   model: ModelDescriptor,
 ): Promise<boolean> {
-  const info = await FileSystem.getInfoAsync(modelPathFor(model));
+  const path = modelPathFor(model);
+  const info = await FileSystem.getInfoAsync(path);
   if (!info.exists || info.isDirectory) return false;
-  return info.size === model.bytes;
+
+  // Exiger la taille exacte du catalogue rendait le modèle « absent » pour un
+  // octet d'écart — et le tagging échouait alors en silence, définitivement.
+  // Une tolérance couvre les rebuilds amont ; l'entête GGUF garantit qu'il
+  // s'agit bien d'un modèle et non d'un téléchargement tronqué.
+  if (info.size < model.bytes * 0.9) return false;
+
+  try {
+    const head = await FileSystem.readAsStringAsync(path, {
+      encoding: FileSystem.EncodingType.Base64,
+      position: 0,
+      length: 4,
+    });
+    // "GGUF" encodé en base64.
+    return head.startsWith("R0dVRg");
+  } catch {
+    // Illisible : mieux vaut tenter le chargement que déclarer le modèle absent.
+    return true;
+  }
 }
 
 export async function deleteModel(model: ModelDescriptor): Promise<void> {

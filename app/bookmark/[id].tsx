@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import {
   Alert,
   Image,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -20,6 +21,7 @@ import {
   setNote,
 } from "../../src/db/bookmarks";
 import { listAssets, type Asset } from "../../src/db/assets";
+import { AssetViewer } from "../../src/ui/AssetViewer";
 import { attachTags, detachTag } from "../../src/db/tags";
 import type { Bookmark } from "../../src/db/types";
 import { hostLabel } from "../../src/db/urls";
@@ -76,6 +78,12 @@ export default function BookmarkScreen() {
   const host = hostLabel(bookmark.url);
   const failed =
     bookmark.fetchStatus === "error" || bookmark.aiStatus === "error";
+  // 'skipped' n'est pas une erreur mais reste un non-traitement : le taire
+  // laissait l'utilisateur devant une fiche sans tags et sans explication.
+  const aiIncomplete =
+    bookmark.aiStatus === "skipped" ||
+    bookmark.aiStatus === "pending" ||
+    bookmark.aiStatus === "running";
 
   return (
     <ScrollView
@@ -156,12 +164,38 @@ export default function BookmarkScreen() {
           ))}
           {bookmark.tags.length === 0 && (
             <Text style={[styles.hint, { color: t.textFaint }]}>
-              {bookmark.aiStatus === "skipped"
-                ? "Aucun modèle installé — ajoute des tags à la main ou installe un modèle dans les réglages."
-                : "Aucun tag pour l'instant."}
+              Aucun tag pour l'instant.
             </Text>
           )}
         </View>
+        {aiIncomplete && (
+          <Row>
+            <Ionicons
+              name={
+                bookmark.aiStatus === "skipped"
+                  ? "alert-circle-outline"
+                  : "hourglass-outline"
+              }
+              size={15}
+              color={bookmark.aiStatus === "skipped" ? t.warning : t.textFaint}
+            />
+            <Text
+              style={[
+                styles.hint,
+                {
+                  flex: 1,
+                  color:
+                    bookmark.aiStatus === "skipped" ? t.warning : t.textFaint,
+                },
+              ]}
+            >
+              {bookmark.aiStatus === "skipped"
+                ? `Tagging non effectué : ${bookmark.aiError ?? "raison inconnue"}. Vérifie Réglages → Modèle IA.`
+                : "Tags en cours de génération…"}
+            </Text>
+          </Row>
+        )}
+
         <TextInput
           value={tagDraft}
           onChangeText={setTagDraft}
@@ -312,7 +346,13 @@ function formatSize(bytes: number): string {
  */
 function AssetsCard({ assets }: { assets: Asset[] }) {
   const t = useTheme();
-  const images = assets.filter((a) => a.kind === "image" || a.kind === "screenshot");
+  const [viewing, setViewing] = useState<number | null>(null);
+
+  // Les vignettes ne montrent que ce qui a un rendu visuel ; la liste
+  // dessous donne accès à tout, archive comprise.
+  const previewable = assets.filter(
+    (a) => a.kind === "image" || a.kind === "screenshot" || a.kind === "video",
+  );
 
   return (
     <Card>
@@ -320,16 +360,30 @@ function AssetsCard({ assets }: { assets: Asset[] }) {
         Conservé sur l'appareil
       </Text>
 
-      {images.length > 0 && (
+      {previewable.length > 0 && (
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
           <View style={styles.thumbRow}>
-            {images.map((a) => (
-              <Image
+            {previewable.map((a) => (
+              <Pressable
                 key={a.id}
-                source={{ uri: a.path }}
-                style={[styles.thumb, { backgroundColor: t.surfaceAlt }]}
-                resizeMode="cover"
-              />
+                onPress={() => setViewing(assets.indexOf(a))}
+                accessibilityRole="imagebutton"
+                accessibilityLabel={`Ouvrir ${ASSET_LABEL[a.kind]?.label ?? a.kind}`}
+                style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}
+              >
+                <Image
+                  source={{ uri: a.path }}
+                  style={[styles.thumb, { backgroundColor: t.surfaceAlt }]}
+                  resizeMode="cover"
+                />
+                {a.kind === "video" && (
+                  // Une vignette de vidéo est indistinguable d'une image : le
+                  // pictogramme dit qu'il y a quelque chose à lire.
+                  <View style={styles.playBadge}>
+                    <Ionicons name="play" size={20} color="#FFFFFF" />
+                  </View>
+                )}
+              </Pressable>
             ))}
           </View>
         </ScrollView>
@@ -341,7 +395,12 @@ function AssetsCard({ assets }: { assets: Asset[] }) {
           label: a.kind,
         };
         return (
-          <Row key={a.id}>
+          <Pressable
+            key={a.id}
+            onPress={() => setViewing(assets.indexOf(a))}
+            style={({ pressed }) => [styles.assetRow, { opacity: pressed ? 0.6 : 1 }]}
+            accessibilityRole="button"
+          >
             <Ionicons name={meta.icon} size={16} color={t.textMuted} />
             <Text style={[styles.hint, { color: t.text, flex: 1 }]}>
               {meta.label}
@@ -349,9 +408,18 @@ function AssetsCard({ assets }: { assets: Asset[] }) {
             <Text style={[styles.hint, { color: t.textFaint }]}>
               {formatSize(a.bytes)}
             </Text>
-          </Row>
+            <Ionicons name="chevron-forward" size={15} color={t.textFaint} />
+          </Pressable>
         );
       })}
+
+      {viewing !== null && (
+        <AssetViewer
+          assets={assets}
+          startIndex={viewing}
+          onClose={() => setViewing(null)}
+        />
+      )}
     </Card>
   );
 }
@@ -359,6 +427,23 @@ function AssetsCard({ assets }: { assets: Asset[] }) {
 const styles = StyleSheet.create({
   thumbRow: { flexDirection: "row", gap: spacing.sm },
   thumb: { width: 120, height: 90, borderRadius: radius.md },
+  playBadge: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(0,0,0,0.35)",
+    borderRadius: radius.md,
+  },
+  assetRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    minHeight: 40,
+  },
   content: { padding: spacing.lg, gap: spacing.md, paddingBottom: spacing.xxl },
   missing: {
     flex: 1,

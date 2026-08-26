@@ -8,6 +8,7 @@ import {
   instagramEmbedUrl,
   isStatsBoilerplate,
   looksLikeLoginWall,
+  mediaIdentity,
   pickCarousel,
 } from "../archive/instagram";
 import { enqueue, isWorkerReady } from "../archive/queue";
@@ -182,7 +183,16 @@ export async function captureBookmark(
   }
 
   // --- Vidéos (avant les images : leur présence change le tri) ---------
-  const videoUrls = page.videos.filter((v) => v.kind === "file");
+  // Instagram publie le même fichier en plusieurs qualités : sans
+  // dédoublonnage, la même vidéo était conservée deux fois.
+  const seenVideos = new Set<string>();
+  const videoUrls = page.videos.filter((v) => {
+    if (v.kind !== "file") return false;
+    const key = mediaIdentity(v.url);
+    if (seenVideos.has(key)) return false;
+    seenVideos.add(key);
+    return true;
+  });
   if (plan.wantVideo) {
     for (const video of videoUrls.slice(0, 2)) {
       if (
