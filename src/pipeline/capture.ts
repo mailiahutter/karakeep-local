@@ -181,7 +181,38 @@ export async function captureBookmark(
     notes.push(`Archive incomplète : ${result.archiveError}`);
   }
 
+  // --- Vidéos (avant les images : leur présence change le tri) ---------
+  const videoUrls = page.videos.filter((v) => v.kind === "file");
+  if (plan.wantVideo) {
+    for (const video of videoUrls.slice(0, 2)) {
+      if (
+        await downloadAsset(bookmarkId, "video", video.url, 200 * 1024 * 1024)
+      ) {
+        outcome.videos++;
+      }
+    }
+    if (outcome.videos === 0 && kind === "youtube") {
+      // YouTube ne sert pas de flux téléchargeable : ses adresses média sont
+      // signées et éphémères. Il faudrait yt-dlp, absent d'Android sans
+      // module natif dédié.
+      notes.push(
+        "Vidéo YouTube non conservée : titre, description et miniature le sont.",
+      );
+    } else if (outcome.videos === 0 && kind === "instagram") {
+      notes.push(
+        "Aucune vidéo trouvée. Si la publication en contient une, connecte-toi " +
+          "depuis Réglages → Compte Instagram : l'adresse du fichier n'est " +
+          "servie qu'à une session ouverte.",
+      );
+    }
+  }
+
   // --- Images ---------------------------------------------------------
+  // Une icône pèse quelques kilo-octets, une vraie illustration bien plus.
+  // C'est le seul critère fiable : le DOM annonce des dimensions nulles tant
+  // que l'image n'est pas chargée.
+  const minImageBytes = kind === "instagram" ? 30_000 : 15_000;
+
   let images: CapturedImage[];
   if (kind === "instagram") {
     // Dédoublonne le carrousel : Instagram sert chaque média en plusieurs
@@ -194,6 +225,10 @@ export async function captureBookmark(
       })),
       plan.maxImages,
     ).map((m) => ({ url: m.url, width: m.width, height: m.height, alt: null }));
+
+    // Sur une publication vidéo, les « images » ne sont que des vignettes du
+    // lecteur : une seule suffit comme illustration.
+    if (outcome.videos > 0) images = images.slice(0, 2);
   } else {
     images = [...page.images].sort(
       (a, b) => b.width * b.height - a.width * a.height,
@@ -208,27 +243,16 @@ export async function captureBookmark(
   }
 
   for (const img of images) {
-    if (await downloadAsset(bookmarkId, "image", img.url)) outcome.images++;
-  }
-
-  // --- Vidéos ---
-  if (plan.wantVideo) {
-    for (const video of page.videos.filter((v) => v.kind === "file").slice(0, 3)) {
-      const asset = await downloadAsset(
+    if (
+      await downloadAsset(
         bookmarkId,
-        "video",
-        video.url,
-        200 * 1024 * 1024,
-      );
-      if (asset) outcome.videos++;
-    }
-    if (outcome.videos === 0 && kind === "youtube") {
-      // YouTube ne sert pas de flux téléchargeable : ses adresses média sont
-      // signées et éphémères. Il faudrait yt-dlp, absent d'Android sans
-      // module natif dédié.
-      notes.push(
-        "Vidéo YouTube non conservée : titre, description et miniature le sont.",
-      );
+        "image",
+        img.url,
+        20 * 1024 * 1024,
+        minImageBytes,
+      )
+    ) {
+      outcome.images++;
     }
   }
 

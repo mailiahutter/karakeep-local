@@ -83,7 +83,7 @@ export function buildTaggingPrompt(input: TaggingPromptInput): string {
       title ? `Titre : ${title}` : "",
       description ? `Description : ${description}` : "",
       `Adresse : ${url}`,
-      content ? `\n${content.slice(0, maxContentChars)}` : "",
+      content ? `\n${stripBoilerplate(content).slice(0, maxContentChars)}` : "",
     ]
       .filter(Boolean)
       .join("\n"),
@@ -235,7 +235,7 @@ export function buildSummaryPrompt(
   maxContentChars = 6000,
 ): string {
   const body = preprocessContent(
-    [title ? `Titre : ${title}` : "", content.slice(0, maxContentChars)]
+    [title ? `Titre : ${title}` : "", stripBoilerplate(content).slice(0, maxContentChars)]
       .filter(Boolean)
       .join("\n\n"),
   );
@@ -266,3 +266,45 @@ export function cleanSummary(raw: string): string {
   return out;
 }
 
+
+
+// --- Nettoyage des mentions légales ---------------------------------
+
+/**
+ * Marqueurs ouvrant un bloc d'avertissement juridique. Ces blocs sont longs,
+ * répétitifs et sans rapport avec le sujet : sur une légende de réseau social
+ * ils représentent couramment 70 à 85 % du texte et noient la seule phrase qui
+ * décrit réellement le contenu.
+ */
+const BOILERPLATE_MARKERS = [
+  "disclaimer",
+  "avertissement :",
+  "assumes no liability",
+  "at your own risk",
+  "à vos risques et périls",
+  "cannot guarantee against",
+  "no expressed or implied warranty",
+  "sole responsibility",
+  // Formulé indépendamment de la conjugaison : « décline », « déclinons »,
+  // « dégageons »… mènent tous à la même tournure.
+  "toute responsabilité",
+  "not responsible for any",
+  "for entertainment purposes only",
+];
+
+/**
+ * Tronque le texte au premier avertissement juridique rencontré.
+ *
+ * Conserve toujours un minimum de substance : si le marqueur apparaît dès les
+ * premiers caractères, mieux vaut garder le texte entier que rendre du vide.
+ */
+export function stripBoilerplate(text: string, minKeep = 60): string {
+  const lower = text.toLowerCase();
+  let cut = -1;
+  for (const marker of BOILERPLATE_MARKERS) {
+    const at = lower.indexOf(marker);
+    if (at >= minKeep && (cut === -1 || at < cut)) cut = at;
+  }
+  if (cut === -1) return text.trim();
+  return text.slice(0, cut).trim();
+}

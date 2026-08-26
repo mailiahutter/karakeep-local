@@ -129,6 +129,12 @@ export async function downloadAsset(
   kind: AssetKind,
   url: string,
   maxBytes = 20 * 1024 * 1024,
+  /**
+   * Poids minimal accepté. Les dimensions annoncées par le DOM valent zéro
+   * tant que l'image n'est pas chargée : le poids du fichier est le seul
+   * critère fiable pour écarter icônes et avatars.
+   */
+  minBytes = 0,
 ): Promise<Asset | null> {
   const dir = await ensureDir(bookmarkId);
   const path = `${dir}${kind}-${Date.now()}.${EXTENSION[kind]}`;
@@ -139,7 +145,12 @@ export async function downloadAsset(
       return null;
     }
     const info = await FileSystem.getInfoAsync(path);
-    if (!info.exists || info.isDirectory || info.size > maxBytes) {
+    if (
+      !info.exists ||
+      info.isDirectory ||
+      info.size > maxBytes ||
+      info.size < minBytes
+    ) {
       await FileSystem.deleteAsync(path, { idempotent: true });
       return null;
     }

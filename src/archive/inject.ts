@@ -220,6 +220,53 @@ export function buildInjectedScript(opts: ArchiveOptions): string {
     return out;
   }
 
+
+  // Instagram ne met pas l'adresse de la vidéo dans <video src> : celle-ci
+  // pointe vers un blob: inexploitable. L'adresse réelle du fichier est dans
+  // le JSON que la page embarque dans ses <script>.
+  function instagramVideoUrls() {
+    var found = [];
+    var seen = {};
+    var push = function (u) {
+      if (!u) return;
+      // Les échappements JSON survivent tels quels dans le HTML.
+      u = u.replace(/\\u0026/g, '&').replace(/\\\//g, '/');
+      if (u.indexOf('http') !== 0 || seen[u]) return;
+      seen[u] = true;
+      found.push(u);
+    };
+
+    var scripts = document.querySelectorAll('script');
+    for (var i = 0; i < scripts.length; i++) {
+      var txt = scripts[i].textContent || '';
+      if (txt.length < 40 || txt.indexOf('video') === -1) continue;
+
+      // "video_url":"https://..."  — structure historique
+      var re1 = /"video_url"\s*:\s*"([^"]+)"/g;
+      var m;
+      while ((m = re1.exec(txt)) !== null) push(m[1]);
+
+      // "video_versions":[{"...","url":"https://..."}] — structure récente
+      var re2 = /"video_versions"\s*:\s*\[(.*?)\]/g;
+      while ((m = re2.exec(txt)) !== null) {
+        var inner = m[1];
+        var re3 = /"url"\s*:\s*"([^"]+)"/g;
+        var m3;
+        while ((m3 = re3.exec(inner)) !== null) push(m3[1]);
+      }
+
+      // contentUrl des données structurées schema.org
+      var re4 = /"contentUrl"\s*:\s*"([^"]+\.mp4[^"]*)"/g;
+      while ((m = re4.exec(txt)) !== null) push(m[1]);
+    }
+
+    // og:video reste un repli valable quand la page le sert.
+    var ogv = meta(['og:video', 'og:video:secure_url', 'og:video:url']);
+    if (ogv) push(ogv);
+
+    return found;
+  }
+
   function instagramExtras() {
     var out = {};
     var media = [];
@@ -263,14 +310,9 @@ export function buildInjectedScript(opts: ArchiveOptions): string {
       });
     }
 
-    var ogVideo = meta(['og:video', 'og:video:secure_url']);
-    if (ogVideo) media.push({ url: absolute(ogVideo), isVideo: true, width: 0, height: 0 });
-    var vids = art.querySelectorAll('video');
-    for (var j = 0; j < vids.length; j++) {
-      var vs = vids[j].currentSrc || vids[j].src;
-      if (vs && vs.indexOf('blob:') !== 0) {
-        media.push({ url: absolute(vs), isVideo: true, width: 0, height: 0 });
-      }
+    var videoUrls = instagramVideoUrls();
+    for (var v = 0; v < videoUrls.length; v++) {
+      media.push({ url: videoUrls[v], isVideo: true, width: 0, height: 0 });
     }
 
     out.media = media;
