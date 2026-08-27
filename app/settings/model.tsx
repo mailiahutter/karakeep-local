@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import {
+  attachExistingDownload,
   CellularBlockedError,
   connectionKind,
   deleteModel,
@@ -57,15 +58,40 @@ export default function ModelScreen() {
     void refresh();
   }, [refresh]);
 
+  // Le gestionnaire système poursuit application fermée : au retour sur
+  // l'écran, il faut se rebrancher sur le transfert en cours plutôt que d'en
+  // lancer un second.
+  useEffect(() => {
+    void (async () => {
+      for (const model of MODELS) {
+        const running = await attachExistingDownload(
+          model,
+          ({ ratio, written, total }) => {
+            setDownload({
+              modelId: model.id,
+              ratio,
+              written,
+              total,
+              resumed: true,
+            });
+          },
+        );
+        if (running) {
+          activeDownload.current = running;
+          void running.promise
+            .then(() => refresh())
+            .catch(() => {})
+            .finally(() => setDownload(null));
+          break;
+        }
+      }
+    })();
+  }, [refresh]);
+
   // Un téléchargement en cours doit être annulé si l'utilisateur quitte
   // l'écran, sinon il continue sans aucun moyen de l'arrêter.
-  useEffect(() => {
-    return () => {
-      // Quitter l'écran met en pause : les gigaoctets déjà transférés sont
-      // conservés et la reprise repartira de là.
-      void activeDownload.current?.pause();
-    };
-  }, []);
+  // Quitter l'écran n'interrompt plus rien : le gestionnaire système poursuit
+  // le transfert, application fermée s'il le faut.
 
   const start = useCallback(
     async (model: ModelDescriptor, allowCellular = false) => {
@@ -76,10 +102,10 @@ export default function ModelScreen() {
         total: model.bytes,
         resumed: false,
       });
-      const task = downloadModel(
+      const task = await downloadModel(
         model,
-        ({ ratio, written, total, resumed }) => {
-          setDownload({ modelId: model.id, ratio, written, total, resumed });
+        ({ ratio, written, total }) => {
+          setDownload({ modelId: model.id, ratio, written, total, resumed: false });
         },
         { allowCellular },
       );

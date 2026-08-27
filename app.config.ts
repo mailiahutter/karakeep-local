@@ -44,6 +44,9 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       "android.permission.INTERNET",
       // Nécessaire pour que le bouton de mise à jour puisse lancer l'installeur.
       "android.permission.REQUEST_INSTALL_PACKAGES",
+      // Sans elle, la progression du téléchargement du modèle resterait
+      // invisible sur Android 13 et suivants.
+      "android.permission.POST_NOTIFICATIONS",
     ],
   },
   ios: {
@@ -84,6 +87,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
         disableIOS: true,
       },
     ],
+    // Déclare le service de téléchargement d'arrière-plan dans le manifeste.
+    "@kesha-antonov/react-native-background-downloader",
     "./plugins/withAndroidTweaks",
   ],
   extra: {

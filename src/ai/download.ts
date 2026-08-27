@@ -1,26 +1,50 @@
+import {
+  completeHandler,
+  createDownloadTask,
+  getExistingDownloadTasks,
+  setConfig,
+  type DownloadTask,
+} from "@kesha-antonov/react-native-background-downloader";
 import * as FileSystem from "expo-file-system/legacy";
-import * as KeepAwake from "expo-keep-awake";
 import * as Network from "expo-network";
 
-import { getDb } from "../db/client";
 import type { ModelDescriptor } from "./models";
 
 /**
- * Téléchargement et vérification des modèles.
+ * Téléchargement des modèles, confié au gestionnaire de téléchargement
+ * d'Android.
  *
- * Un modèle pèse plusieurs gigaoctets : le transfert doit survivre à une
- * coupure, ne pas dévorer un forfait mobile, et ne jamais effacer ce qui est
- * déjà acquis sur un simple écart de taille.
+ * Une tentative précédente s'appuyait sur `createDownloadResumable` d'Expo :
+ * sa clé de reprise n'est produite que par un appel explicite à `pauseAsync`.
+ * Sur une coupure réseau — « Software caused connection abort » — la promesse
+ * est rejetée sans qu'aucune pause n'ait lieu, aucune clé n'est enregistrée, et
+ * la tentative suivante repart de zéro. Le cas traité n'était pas celui qui
+ * arrive.
+ *
+ * Le gestionnaire système, lui, reprend seul après une coupure, poursuit
+ * application fermée, et sait se limiter au Wi-Fi.
  */
 
-/**
- * Les modèles vivent dans le répertoire documents — jamais le cache, qu'Android
- * vide sous pression de stockage.
- */
 const MODEL_DIR = `${FileSystem.documentDirectory}models/`;
 
-/** Clé de reprise conservée en base, pour repartir d'où la coupure a eu lieu. */
-const RESUME_KEY = (modelId: string) => `download.resume.${modelId}`;
+/** Identifiant stable : il permet de retrouver un transfert après redémarrage. */
+const taskId = (model: ModelDescriptor) => `model-${model.id}`;
+
+let configured = false;
+function configureOnce(): void {
+  if (configured) return;
+  configured = true;
+  setConfig({
+    // Le gestionnaire signale l'avancement dans la zone de notifications :
+    // l'utilisateur suit un transfert de plusieurs gigaoctets sans garder
+    // l'application ouverte.
+    showNotificationsEnabled: true,
+    showCompletionNotification: true,
+    showCancelAction: true,
+    progressInterval: 1000,
+    maxParallelDownloads: 1,
+  });
+}
 
 export function modelPathFor(model: ModelDescriptor): string {
   return `${MODEL_DIR}${model.fileName}`;
@@ -33,36 +57,10 @@ async function ensureDir(): Promise<void> {
   }
 }
 
-async function readResume(modelId: string): Promise<string | undefined> {
-  const db = await getDb();
-  const row = await db.getFirstAsync<{ value: string }>(
-    "SELECT value FROM settings WHERE key = ?",
-    [RESUME_KEY(modelId)],
-  );
-  return row?.value || undefined;
-}
-
-async function writeResume(
-  modelId: string,
-  data: string | null,
-): Promise<void> {
-  const db = await getDb();
-  if (data === null) {
-    await db.runAsync("DELETE FROM settings WHERE key = ?", [
-      RESUME_KEY(modelId),
-    ]);
-    return;
-  }
-  await db.runAsync(
-    "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-    [RESUME_KEY(modelId), data],
-  );
-}
-
 /**
  * Un fichier GGUF commence par ces quatre octets. Contrôle bien plus sûr
- * qu'une comparaison de taille : il distingue un modèle valide d'un
- * téléchargement tronqué ou d'une page d'erreur enregistrée par méprise.
+ * qu'une comparaison de taille : il distingue un modèle valide d'une page
+ * d'erreur ou d'un portail réseau enregistrés par méprise.
  */
 async function hasGgufHeader(path: string): Promise<boolean> {
   try {
@@ -80,9 +78,9 @@ async function hasGgufHeader(path: string): Promise<boolean> {
 /**
  * Le modèle est-il présent et exploitable ?
  *
- * La taille du catalogue n'est qu'un ordre de grandeur : elle peut différer de
- * quelques centaines d'octets d'une reconstruction à l'autre en amont. Exiger
- * l'égalité stricte rendait un modèle parfaitement valide « absent ».
+ * La taille du catalogue n'est qu'un repère : elle peut différer de quelques
+ * centaines d'octets d'une reconstruction amont à l'autre. Exiger l'égalité
+ * stricte rendait un modèle parfaitement valide « absent ».
  */
 export async function isModelInstalled(
   model: ModelDescriptor,
@@ -96,30 +94,17 @@ export async function isModelInstalled(
 
 export async function deleteModel(model: ModelDescriptor): Promise<void> {
   await FileSystem.deleteAsync(modelPathFor(model), { idempotent: true });
-  await writeResume(model.id, null);
 }
 
-/** Octets déjà acquis d'un téléchargement interrompu. */
 export async function partialBytes(model: ModelDescriptor): Promise<number> {
   const info = await FileSystem.getInfoAsync(modelPathFor(model));
   return info.exists && !info.isDirectory ? info.size : 0;
 }
 
 export interface DownloadProgress {
-  /** Entre 0 et 1, ou null si la taille totale est inconnue. */
   ratio: number | null;
   written: number;
   total: number;
-  /** Vrai si le transfert a repris là où il s'était arrêté. */
-  resumed: boolean;
-}
-
-export interface ModelDownload {
-  promise: Promise<string>;
-  /** Interrompt en conservant l'acquis : la reprise repartira de là. */
-  pause: () => Promise<void>;
-  /** Abandonne et efface le fichier partiel. */
-  cancel: () => Promise<void>;
 }
 
 export type ConnectionKind = "wifi" | "cellular" | "other" | "none";
@@ -146,120 +131,131 @@ export class CellularBlockedError extends Error {
   }
 }
 
+export interface ModelDownload {
+  promise: Promise<string>;
+  /** Suspend en conservant l'acquis. */
+  pause: () => Promise<void>;
+  /** Reprend un transfert suspendu. */
+  resume: () => Promise<void>;
+  /** Abandonne et efface le fichier partiel. */
+  cancel: () => Promise<void>;
+}
+
 /**
- * Télécharge un modèle, en reprenant un transfert interrompu si possible.
+ * Rattache le suivi à une tâche, qu'elle vienne d'être créée ou qu'elle
+ * tournait déjà — le cas au retour dans l'application.
+ */
+function attach(
+  task: DownloadTask,
+  model: ModelDescriptor,
+  onProgress: (p: DownloadProgress) => void,
+): ModelDownload {
+  const promise = new Promise<string>((resolve, reject) => {
+    task
+      .progress(({ bytesDownloaded, bytesTotal }) => {
+        const total = bytesTotal > 0 ? bytesTotal : model.bytes;
+        onProgress({
+          ratio: total > 0 ? bytesDownloaded / total : null,
+          written: bytesDownloaded,
+          total,
+        });
+      })
+      .done(() => {
+        void (async () => {
+          const path = modelPathFor(model);
+          // Ce qui n'est pas un GGUF ne sera jamais exploitable — page
+          // d'erreur, portail captif. Là seulement, effacer est justifié.
+          if (!(await hasGgufHeader(path))) {
+            await FileSystem.deleteAsync(path, { idempotent: true });
+            reject(
+              new Error(
+                "Le fichier reçu n'est pas un modèle GGUF valide. Le téléchargement a probablement été intercepté par un portail réseau.",
+              ),
+            );
+          } else {
+            resolve(path);
+          }
+          // Signale au système que le traitement post-téléchargement est fini.
+          completeHandler(task.id);
+        })();
+      })
+      .error(({ error }) => {
+        // Le fichier partiel est CONSERVÉ : le gestionnaire reprendra où il
+        // s'est arrêté à la prochaine tentative.
+        reject(new Error(error || "Téléchargement interrompu"));
+      });
+  });
+
+  return {
+    promise,
+    pause: () => task.pause(),
+    resume: () => task.resume(),
+    cancel: async () => {
+      try {
+        await task.stop();
+      } finally {
+        await FileSystem.deleteAsync(modelPathFor(model), { idempotent: true });
+      }
+    },
+  };
+}
+
+/**
+ * Reprend le suivi d'un transfert déjà en cours, s'il en existe un.
+ *
+ * Le gestionnaire système poursuit application fermée : au retour, il faut se
+ * rebrancher dessus plutôt que d'en lancer un second.
+ */
+export async function attachExistingDownload(
+  model: ModelDescriptor,
+  onProgress: (p: DownloadProgress) => void,
+): Promise<ModelDownload | null> {
+  configureOnce();
+  try {
+    const tasks = await getExistingDownloadTasks();
+    const existing = tasks.find((t) => t.id === taskId(model));
+    return existing ? attach(existing, model, onProgress) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Lance le téléchargement d'un modèle.
  *
  * `allowCellular` reste explicite et jamais implicite : plusieurs gigaoctets,
  * c'est un forfait mobile entier.
  */
-export function downloadModel(
+export async function downloadModel(
   model: ModelDescriptor,
   onProgress: (p: DownloadProgress) => void,
   opts: { allowCellular?: boolean } = {},
-): ModelDownload {
-  const target = modelPathFor(model);
-  let resumable: FileSystem.DownloadResumable | null = null;
-  let abandoned = false;
+): Promise<ModelDownload> {
+  configureOnce();
 
-  const promise = (async () => {
-    const connection = await connectionKind();
-    if (connection === "none") throw new Error("Aucune connexion réseau.");
-    if (connection === "cellular" && !opts.allowCellular) {
-      throw new CellularBlockedError();
-    }
+  const connection = await connectionKind();
+  if (connection === "none") throw new Error("Aucune connexion réseau.");
+  if (connection === "cellular" && !opts.allowCellular) {
+    throw new CellularBlockedError();
+  }
 
-    await ensureDir();
+  await ensureDir();
 
-    // Un fichier déjà complet et valide n'a pas à être retéléchargé.
-    if (await isModelInstalled(model)) {
-      await writeResume(model.id, null);
-      return target;
-    }
+  // Un transfert déjà lancé ne doit pas être doublé.
+  const existing = await attachExistingDownload(model, onProgress);
+  if (existing) return existing;
 
-    const resumeData = await readResume(model.id);
-    const already = await partialBytes(model);
+  const task = createDownloadTask({
+    id: taskId(model),
+    url: model.url,
+    destination: modelPathFor(model),
+    // Contrainte appliquée par le système lui-même, pas seulement par nous.
+    isAllowedOverMetered: opts.allowCellular ?? false,
+    isAllowedOverRoaming: false,
+    metadata: { modelId: model.id, label: model.label },
+  });
 
-    // Empêche Android d'endormir le processus pendant le transfert : une mise
-    // en veille prolongée l'interromprait.
-    KeepAwake.activateKeepAwakeAsync("model-download").catch(() => {});
-
-    try {
-      resumable = FileSystem.createDownloadResumable(
-        model.url,
-        target,
-        {},
-        ({ totalBytesWritten, totalBytesExpectedToWrite }) => {
-          const total =
-            totalBytesExpectedToWrite > 0
-              ? totalBytesExpectedToWrite
-              : model.bytes;
-          onProgress({
-            ratio: total > 0 ? totalBytesWritten / total : null,
-            written: totalBytesWritten,
-            total,
-            resumed: already > 0,
-          });
-        },
-        resumeData,
-      );
-
-      const result = resumeData
-        ? await resumable.resumeAsync()
-        : await resumable.downloadAsync();
-
-      if (abandoned) throw new Error("Téléchargement annulé");
-      if (!result) throw new Error("Téléchargement interrompu");
-
-      const info = await FileSystem.getInfoAsync(target);
-      const size = info.exists && !info.isDirectory ? info.size : 0;
-
-      // Ce qui n'est pas un GGUF ne sera jamais exploitable : page d'erreur,
-      // portail captif… là, effacer est justifié.
-      if (!(await hasGgufHeader(target))) {
-        await FileSystem.deleteAsync(target, { idempotent: true });
-        await writeResume(model.id, null);
-        throw new Error(
-          "Le fichier reçu n'est pas un modèle GGUF valide. Le téléchargement a probablement été intercepté par un portail réseau.",
-        );
-      }
-
-      // Incomplet : on CONSERVE l'acquis. Effacer plusieurs gigaoctets pour
-      // quelques octets manquants était le défaut le plus coûteux de la
-      // version précédente.
-      if (size < model.bytes * 0.98) {
-        throw new Error(
-          `Téléchargement incomplet : ${Math.round((size / model.bytes) * 100)} % reçus. Relance pour reprendre où ça s'est arrêté.`,
-        );
-      }
-
-      await writeResume(model.id, null);
-      return target;
-    } finally {
-      KeepAwake.deactivateKeepAwake("model-download");
-    }
-  })();
-
-  return {
-    promise,
-    pause: async () => {
-      try {
-        const data = await resumable?.pauseAsync();
-        // La clé de reprise permet de repartir de l'octet atteint plutôt que
-        // de recommencer les gigaoctets déjà transférés.
-        if (data?.resumeData) await writeResume(model.id, data.resumeData);
-      } catch {
-        // Sans clé de reprise, le fichier partiel demeure : la relance
-        // repartira du début, mais rien n'est perdu.
-      }
-    },
-    cancel: async () => {
-      abandoned = true;
-      try {
-        await resumable?.cancelAsync();
-      } finally {
-        await FileSystem.deleteAsync(target, { idempotent: true });
-        await writeResume(model.id, null);
-      }
-    },
-  };
+  const handle = attach(task, model, onProgress);
+  task.start();
+  return handle;
 }
