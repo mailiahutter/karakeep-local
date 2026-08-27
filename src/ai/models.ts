@@ -20,6 +20,16 @@ export interface ModelDescriptor {
 
 export const MODELS: ModelDescriptor[] = [
   {
+    id: "qwen2.5-7b-instruct-q4km",
+    label: "Qwen 2.5 7B Instruct",
+    bytes: 4_683_073_184,
+    ramHint: "12 Go et plus",
+    url: "https://huggingface.co/bartowski/Qwen2.5-7B-Instruct-GGUF/resolve/main/Qwen2.5-7B-Instruct-Q4_K_M.gguf",
+    fileName: "Qwen2.5-7B-Instruct-Q4_K_M.gguf",
+    notes:
+      "Nettement plus fin sur le classement et les résumés. À réserver aux appareils confortables : il occupe environ 5,5 Go de mémoire en usage.",
+  },
+  {
     id: "qwen2.5-3b-instruct-q4km",
     label: "Qwen 2.5 3B Instruct",
     bytes: 1_929_903_264,

@@ -1,6 +1,7 @@
 import * as SQLite from "expo-sqlite";
 
 import { MIGRATIONS } from "./migrations";
+import { seedThemesIfEmpty } from "./themes";
 
 const DB_NAME = "karakeep-local.db";
 
@@ -27,6 +28,10 @@ async function openAndMigrate(): Promise<SQLite.SQLiteDatabase> {
     // tableau littéral, il n'y a pas d'entrée utilisateur ici.
     await db.execAsync(`PRAGMA user_version = ${i + 1}`);
   }
+
+  // L'arborescence de départ doit exister avant la première capture, sinon
+  // le classement n'aurait aucune catégorie à proposer.
+  await seedThemesIfEmpty(db);
 
   return db;
 }

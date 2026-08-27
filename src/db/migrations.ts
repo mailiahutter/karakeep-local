@@ -131,4 +131,36 @@ export const MIGRATIONS: string[] = [
   INSERT INTO bookmarks_fts(bookmark_id, title, description, content, url)
   SELECT id, title, COALESCE(description, ''), content, url FROM bookmarks;
   `,
+
+  // 003 — rangement par thème et sous-thème.
+  //
+  // Le tagging libre demandait au modèle d'inventer des mots ; le classement
+  // lui demande de choisir dans une liste fermée. C'est incomparablement plus
+  // fiable pour un petit modèle, et c'est ce qui correspond à l'usage :
+  // retrouver « une idée d'aménagement de van », pas « un tag vanlife ».
+  `
+  CREATE TABLE themes (
+    id       TEXT PRIMARY KEY NOT NULL,
+    name     TEXT NOT NULL,
+    icon     TEXT,
+    position INTEGER NOT NULL DEFAULT 0
+  );
+  CREATE UNIQUE INDEX idx_themes_name ON themes(name COLLATE NOCASE);
+
+  CREATE TABLE subthemes (
+    id       TEXT PRIMARY KEY NOT NULL,
+    theme_id TEXT NOT NULL REFERENCES themes(id) ON DELETE CASCADE,
+    name     TEXT NOT NULL,
+    position INTEGER NOT NULL DEFAULT 0
+  );
+  CREATE INDEX idx_subthemes_theme ON subthemes(theme_id, position);
+  CREATE UNIQUE INDEX idx_subthemes_name ON subthemes(theme_id, name COLLATE NOCASE);
+
+  ALTER TABLE bookmarks ADD COLUMN theme_id TEXT REFERENCES themes(id) ON DELETE SET NULL;
+  ALTER TABLE bookmarks ADD COLUMN subtheme_id TEXT REFERENCES subthemes(id) ON DELETE SET NULL;
+  -- 'ai' si proposé par le modèle, 'human' si corrigé à la main : une
+  -- correction manuelle ne doit jamais être écrasée par un reclassement.
+  ALTER TABLE bookmarks ADD COLUMN theme_source TEXT;
+  CREATE INDEX idx_bookmarks_theme ON bookmarks(theme_id, subtheme_id);
+  `,
 ];

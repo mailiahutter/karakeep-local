@@ -1,6 +1,8 @@
 import { captureBookmark } from "./capture";
 import { generateTags } from "../ai/tagging";
 import { generateSummary } from "../ai/summary";
+import { classifyBookmark } from "../ai/classification";
+import { assignTheme, isHumanClassified, listThemes } from "../db/themes";
 import { isModelInstalled } from "../ai/download";
 import { findModel } from "../ai/models";
 import { modelPathFor } from "../ai/download";
@@ -113,8 +115,32 @@ async function runTagStage(): Promise<number> {
         await attachTags(bookmark.id, tags, "ai");
       }
 
-      // Le résumé suit le tagging : le modèle est déjà chargé en mémoire, la
-      // seconde inférence coûte donc bien moins que la première.
+      // Rangement thématique : un choix dans une liste fermée, la tâche la
+      // plus fiable des trois pour un modèle embarqué.
+      if (!(await isHumanClassified(bookmark.id))) {
+        const themes = await listThemes();
+        const placed = await classifyBookmark(
+          themes.map((t) => ({
+            id: t.id,
+            name: t.name,
+            subthemes: t.subthemes.map((s) => ({ id: s.id, name: s.name })),
+          })),
+          bookmark.title,
+          bookmark.content ?? "",
+          modelPath,
+        );
+        if (placed) {
+          await assignTheme(
+            bookmark.id,
+            placed.themeId,
+            placed.subthemeId,
+            "ai",
+          );
+        }
+      }
+
+      // Le résumé suit : le modèle est déjà chargé en mémoire, les inférences
+      // suivantes coûtent donc bien moins que la première.
       if (bookmark.content && bookmark.content.trim().length > 0) {
         const summary = await generateSummary(
           bookmark.title,

@@ -145,7 +145,7 @@ export function WebArchiver() {
         buildInjectedScript({
           maxResourceBytes: 3 * 1024 * 1024,
           maxTotalBytes: 12 * 1024 * 1024,
-          inlineResources: running.job.wantArchive,
+          wantArchive: running.job.wantArchive,
           sourceKind: running.job.sourceKind,
         }),
       );

@@ -23,6 +23,7 @@ import {
 import { listAssets, type Asset } from "../../src/db/assets";
 import { AssetViewer } from "../../src/ui/AssetViewer";
 import { attachTags, detachTag } from "../../src/db/tags";
+import { assignTheme, listThemes, type Theme } from "../../src/db/themes";
 import type { Bookmark } from "../../src/db/types";
 import { hostLabel } from "../../src/db/urls";
 import { retryBookmark } from "../../src/pipeline/queue";
@@ -41,6 +42,8 @@ export default function BookmarkScreen() {
   const [tagDraft, setTagDraft] = useState("");
   const [retrying, setRetrying] = useState(false);
   const [assets, setAssets] = useState<Asset[]>([]);
+  const [themes, setThemes] = useState<Theme[]>([]);
+  const [picking, setPicking] = useState(false);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -48,6 +51,7 @@ export default function BookmarkScreen() {
     setBookmark(found);
     setNoteDraft(found?.note ?? "");
     setAssets(found ? await listAssets(found.id) : []);
+    setThemes(await listThemes());
     setLoading(false);
   }, [id]);
 
@@ -138,6 +142,98 @@ export default function BookmarkScreen() {
           </Text>
         </Card>
       )}
+
+      <Card>
+        <Text style={[styles.sectionLabel, { color: t.textMuted }]}>Rangé dans</Text>
+        {(() => {
+          const theme = themes.find((th) => th.id === bookmark.themeId);
+          const sub = theme?.subthemes.find((sb) => sb.id === bookmark.subthemeId);
+          return (
+            <Pressable
+              onPress={() => setPicking((v) => !v)}
+              style={styles.themeRow}
+              accessibilityRole="button"
+            >
+              <Ionicons
+                name={theme ? "albums" : "albums-outline"}
+                size={18}
+                color={theme ? t.accent : t.textFaint}
+              />
+              <Text
+                style={[
+                  styles.themeLabel,
+                  { color: theme ? t.text : t.textFaint, flex: 1 },
+                ]}
+              >
+                {theme
+                  ? `${theme.name}${sub ? ` › ${sub.name}` : ""}`
+                  : "Non rangé — toucher pour choisir"}
+              </Text>
+              {bookmark.themeSource === "ai" && theme && (
+                <Ionicons name="sparkles" size={13} color={t.accent} />
+              )}
+              <Ionicons
+                name={picking ? "chevron-up" : "chevron-down"}
+                size={16}
+                color={t.textFaint}
+              />
+            </Pressable>
+          );
+        })()}
+
+        {picking && (
+          <View style={styles.picker}>
+            {themes.map((th) => (
+              <View key={th.id}>
+                {th.subthemes.length === 0 ? (
+                  <Pressable
+                    onPress={() =>
+                      void mutate(() =>
+                        assignTheme(bookmark.id, th.id, null, "human"),
+                      ).then(() => setPicking(false))
+                    }
+                    style={styles.pickRow}
+                  >
+                    <Text style={[styles.hint, { color: t.text }]}>{th.name}</Text>
+                  </Pressable>
+                ) : (
+                  <>
+                    <Text style={[styles.pickHeader, { color: t.textFaint }]}>
+                      {th.name}
+                    </Text>
+                    {th.subthemes.map((sb) => (
+                      <Pressable
+                        key={sb.id}
+                        onPress={() =>
+                          void mutate(() =>
+                            assignTheme(bookmark.id, th.id, sb.id, "human"),
+                          ).then(() => setPicking(false))
+                        }
+                        style={styles.pickRow}
+                      >
+                        <Ionicons
+                          name={
+                            bookmark.subthemeId === sb.id
+                              ? "radio-button-on"
+                              : "radio-button-off"
+                          }
+                          size={16}
+                          color={
+                            bookmark.subthemeId === sb.id ? t.accent : t.textFaint
+                          }
+                        />
+                        <Text style={[styles.hint, { color: t.text }]}>
+                          {sb.name}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </>
+                )}
+              </View>
+            ))}
+          </View>
+        )}
+      </Card>
 
       {bookmark.description && (
         <Card>
@@ -472,5 +568,27 @@ const styles = StyleSheet.create({
     fontSize: 14.5,
   },
   noteInput: { minHeight: 80, textAlignVertical: "top" },
+  themeLabel: { fontSize: 14.5, fontWeight: "600" },
+  themeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    minHeight: 40,
+  },
+  picker: { gap: 2 },
+  pickHeader: {
+    fontSize: 11.5,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    marginTop: spacing.sm,
+  },
+  pickRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    paddingVertical: spacing.sm,
+    paddingLeft: spacing.sm,
+    minHeight: 36,
+  },
   body: { fontSize: 14.5, lineHeight: 22 },
 });

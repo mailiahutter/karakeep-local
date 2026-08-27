@@ -45,6 +45,7 @@ export default function RootLayout() {
             options={{ title: "Ajouter un lien", presentation: "modal" }}
           />
           <Stack.Screen name="settings/model" options={{ title: "Modèle IA" }} />
+          <Stack.Screen name="theme/[id]" options={{ title: "Thème" }} />
           <Stack.Screen
             name="settings/instagram"
             options={{ title: "Compte Instagram" }}

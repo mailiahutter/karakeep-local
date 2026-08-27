@@ -32,6 +32,9 @@ export interface BookmarkRow {
   ai_error: string | null;
   summary: string | null;
   source_kind: SourceKind;
+  theme_id: string | null;
+  subtheme_id: string | null;
+  theme_source: "ai" | "human" | null;
 }
 
 export interface Tag {
@@ -63,6 +66,9 @@ export interface Bookmark {
   aiError: string | null;
   summary: string | null;
   sourceKind: SourceKind;
+  themeId: string | null;
+  subthemeId: string | null;
+  themeSource: "ai" | "human" | null;
   tags: Tag[];
 }
 
@@ -89,6 +95,9 @@ export function rowToBookmark(row: BookmarkRow, tags: Tag[] = []): Bookmark {
     aiError: row.ai_error,
     summary: row.summary,
     sourceKind: row.source_kind ?? "website",
+    themeId: row.theme_id ?? null,
+    subthemeId: row.subtheme_id ?? null,
+    themeSource: row.theme_source ?? null,
     tags,
   };
 }

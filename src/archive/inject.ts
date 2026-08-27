@@ -16,8 +16,12 @@ export interface ArchiveOptions {
   maxResourceBytes: number;
   /** Poids total maximal de l'archive. */
   maxTotalBytes: number;
-  /** Intégrer les ressources, ou se contenter du DOM rendu. */
-  inlineResources: boolean;
+  /**
+   * Produire une archive HTML autonome. À faux, aucune archive n'est
+   * construite : sur une page d'intégration Instagram, le HTML sans ses
+   * ressources ne vaut rien et n'encombre que le stockage.
+   */
+  wantArchive: boolean;
   /** Nature de la source : déclenche une extraction ciblée. */
   sourceKind: "website" | "youtube" | "instagram";
 }
@@ -136,15 +140,13 @@ export function buildInjectedScript(opts: ArchiveOptions): string {
 
   // Construit une copie autonome du document : styles et images intégrés.
   function buildArchive() {
+    if (!OPTS.wantArchive) return Promise.resolve(null);
     var doc = document.documentElement.cloneNode(true);
     var drop = doc.querySelectorAll('script,noscript');
     for (var i = 0; i < drop.length; i++) {
       if (drop[i].parentNode) drop[i].parentNode.removeChild(drop[i]);
     }
 
-    if (!OPTS.inlineResources) {
-      return Promise.resolve('<!DOCTYPE html>' + doc.outerHTML);
-    }
 
     var budget = { used: 0 };
     var jobs = [];
