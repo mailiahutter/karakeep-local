@@ -3,10 +3,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import {
+  CellularBlockedError,
+  connectionKind,
   deleteModel,
   downloadModel,
   isModelInstalled,
   modelPathFor,
+  partialBytes,
+  type ConnectionKind,
   type ModelDownload,
 } from "../../src/ai/download";
 import { releaseModel } from "../../src/ai/llm";
@@ -20,6 +24,7 @@ interface DownloadState {
   ratio: number | null;
   written: number;
   total: number;
+  resumed: boolean;
 }
 
 export default function ModelScreen() {
@@ -28,16 +33,24 @@ export default function ModelScreen() {
   const [selectedId, setSelectedId] = useState<string>("");
   const [installed, setInstalled] = useState<Record<string, boolean>>({});
   const [download, setDownload] = useState<DownloadState | null>(null);
+  const [partials, setPartials] = useState<Record<string, number>>({});
+  const [connection, setConnection] = useState<ConnectionKind>("other");
   const activeDownload = useRef<ModelDownload | null>(null);
 
   const refresh = useCallback(async () => {
     const settings = await loadSettings();
     setSelectedId(settings.modelId);
     const state: Record<string, boolean> = {};
+    const partial: Record<string, number> = {};
     for (const model of MODELS) {
       state[model.id] = await isModelInstalled(model);
+      // Un transfert interrompu laisse des octets acquis : ils seront repris,
+      // pas retéléchargés.
+      if (!state[model.id]) partial[model.id] = await partialBytes(model);
     }
     setInstalled(state);
+    setPartials(partial);
+    setConnection(await connectionKind());
   }, []);
 
   useEffect(() => {
@@ -48,21 +61,28 @@ export default function ModelScreen() {
   // l'écran, sinon il continue sans aucun moyen de l'arrêter.
   useEffect(() => {
     return () => {
-      void activeDownload.current?.cancel();
+      // Quitter l'écran met en pause : les gigaoctets déjà transférés sont
+      // conservés et la reprise repartira de là.
+      void activeDownload.current?.pause();
     };
   }, []);
 
   const start = useCallback(
-    async (model: ModelDescriptor) => {
+    async (model: ModelDescriptor, allowCellular = false) => {
       setDownload({
         modelId: model.id,
         ratio: 0,
         written: 0,
         total: model.bytes,
+        resumed: false,
       });
-      const task = downloadModel(model, ({ ratio, written, total }) => {
-        setDownload({ modelId: model.id, ratio, written, total });
-      });
+      const task = downloadModel(
+        model,
+        ({ ratio, written, total, resumed }) => {
+          setDownload({ modelId: model.id, ratio, written, total, resumed });
+        },
+        { allowCellular },
+      );
       activeDownload.current = task;
       try {
         await task.promise;
@@ -71,7 +91,16 @@ export default function ModelScreen() {
         await refresh();
       } catch (err) {
         const message = (err as Error).message;
-        if (!message.includes("annulé")) {
+        if (err instanceof CellularBlockedError) {
+          Alert.alert("Données mobiles", message, [
+            { text: "Annuler", style: "cancel" },
+            {
+              text: "Télécharger quand même",
+              style: "destructive",
+              onPress: () => void start(model, true),
+            },
+          ]);
+        } else if (!message.includes("annulé")) {
           Alert.alert("Téléchargement interrompu", message);
         }
       } finally {
@@ -129,6 +158,35 @@ export default function ModelScreen() {
         HuggingFace, puis conservé sur l'appareil.
       </Text>
 
+      <Card
+        style={{
+          borderColor: connection === "cellular" ? t.warning : t.border,
+        }}
+      >
+        <Row>
+          <Ionicons
+            name={
+              connection === "wifi"
+                ? "wifi"
+                : connection === "cellular"
+                  ? "cellular"
+                  : "cloud-offline-outline"
+            }
+            size={18}
+            color={connection === "wifi" ? t.success : t.warning}
+          />
+          <Text style={[styles.notes, { color: t.textMuted, flex: 1 }]}>
+            {connection === "wifi"
+              ? "Connecté en Wi-Fi : le téléchargement peut se lancer."
+              : connection === "cellular"
+                ? "Données mobiles. Le téléchargement est bloqué : un modèle représente plusieurs gigaoctets, soit un forfait entier."
+                : connection === "none"
+                  ? "Aucune connexion réseau."
+                  : "Connexion réseau détectée."}
+          </Text>
+        </Row>
+      </Card>
+
       <SectionTitle>Modèles disponibles</SectionTitle>
 
       {MODELS.map((model) => {
@@ -181,18 +239,35 @@ export default function ModelScreen() {
                       : `${Math.round(download.ratio * 100)} %`}
                   </Text>
                 </Row>
-                <Button
-                  label="Annuler"
-                  variant="ghost"
-                  onPress={() => void activeDownload.current?.cancel()}
-                />
+                <Row>
+                  <Button
+                    label="Mettre en pause"
+                    icon="pause"
+                    variant="secondary"
+                    style={{ flex: 1 }}
+                    onPress={() => void activeDownload.current?.pause()}
+                  />
+                  <Button
+                    label="Abandonner"
+                    variant="ghost"
+                    onPress={() => void activeDownload.current?.cancel()}
+                  />
+                </Row>
               </View>
             )}
 
             {!busy && !isInstalled && (
               <Button
-                label={`Télécharger (${formatBytes(model.bytes)})`}
-                icon="download-outline"
+                label={
+                  (partials[model.id] ?? 0) > 0
+                    ? `Reprendre (${formatBytes(partials[model.id])} déjà reçus)`
+                    : `Télécharger (${formatBytes(model.bytes)})`
+                }
+                icon={
+                  (partials[model.id] ?? 0) > 0
+                    ? "play-forward-outline"
+                    : "download-outline"
+                }
                 variant={isSelected ? "primary" : "secondary"}
                 disabled={download !== null}
                 onPress={() => void start(model)}
@@ -212,7 +287,8 @@ export default function ModelScreen() {
       })}
 
       <Text style={[styles.footnote, { color: t.textFaint }]}>
-        Télécharge de préférence en Wi-Fi. Le modèle reste en mémoire pendant
+        Un transfert interrompu reprend là où il s'était arrêté : rien n'est
+        retéléchargé. Le modèle reste en mémoire pendant
         quelques minutes après usage, puis est déchargé pour libérer la RAM.
       </Text>
     </ScrollView>

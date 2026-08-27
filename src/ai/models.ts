@@ -8,7 +8,11 @@
 export interface ModelDescriptor {
   id: string;
   label: string;
-  /** Taille du téléchargement en octets. */
+  /**
+   * Taille du téléchargement en octets, relevée sur l'en-tête Content-Length
+   * du dépôt. Ne jamais l'estimer : elle sert de repère d'intégrité, et une
+   * valeur inventée fait rejeter un modèle parfaitement valide.
+   */
   bytes: number;
   /** RAM totale de l'appareil recommandée. */
   ramHint: string;
@@ -22,7 +26,7 @@ export const MODELS: ModelDescriptor[] = [
   {
     id: "qwen2.5-7b-instruct-q4km",
     label: "Qwen 2.5 7B Instruct",
-    bytes: 4_683_073_184,
+    bytes: 4_683_074_240,
     ramHint: "12 Go et plus",
     url: "https://huggingface.co/bartowski/Qwen2.5-7B-Instruct-GGUF/resolve/main/Qwen2.5-7B-Instruct-Q4_K_M.gguf",
     fileName: "Qwen2.5-7B-Instruct-Q4_K_M.gguf",
