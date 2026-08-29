@@ -174,7 +174,14 @@ async function runTagStage(deadline: () => boolean): Promise<number> {
           themes.map((t) => ({
             id: t.id,
             name: t.name,
-            subthemes: t.subthemes.map((s) => ({ id: s.id, name: s.name })),
+            // La consigne écrite par l'utilisateur suit jusqu'au prompt :
+            // sans elle, le modèle ne dispose que d'un intitulé ambigu.
+            description: t.description,
+            subthemes: t.subthemes.map((s) => ({
+              id: s.id,
+              name: s.name,
+              description: s.description,
+            })),
           })),
           bookmark.title,
           bookmark.content ?? "",

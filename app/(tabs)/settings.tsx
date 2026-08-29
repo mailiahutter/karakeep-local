@@ -109,6 +109,13 @@ export default function SettingsScreen() {
           />
 
           <NavRow
+            icon="albums-outline"
+            label="Thèmes et sous-thèmes"
+            hint="Les tiroirs où le modèle range les liens, et la consigne qu'il lit pour décider."
+            onPress={() => router.push("/settings/themes")}
+          />
+
+          <NavRow
             icon="logo-instagram"
             label="Compte Instagram"
             hint="Sans session, Instagram masque légendes et carrousels."

@@ -51,6 +51,10 @@ export default function RootLayout() {
           <Stack.Screen name="settings/model" options={{ title: "Modèle IA" }} />
           <Stack.Screen name="theme/[id]" options={{ title: "Thème" }} />
           <Stack.Screen
+            name="settings/themes"
+            options={{ title: "Thèmes et sous-thèmes" }}
+          />
+          <Stack.Screen
             name="settings/instagram"
             options={{ title: "Compte Instagram" }}
           />

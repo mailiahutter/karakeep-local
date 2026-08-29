@@ -16,12 +16,33 @@ export interface ClassifyOption {
   themeName: string;
   subthemeId: string | null;
   subthemeName: string | null;
+  /**
+   * Consigne de rangement, écrite par l'utilisateur. C'est elle qui lève
+   * l'ambiguïté d'un intitulé : « Moto › Ma sélection » ne dit pas si l'on
+   * range des motos à acheter ou des itinéraires.
+   */
+  description: string | null;
 }
 
 export interface ThemeTree {
   id: string;
   name: string;
-  subthemes: { id: string; name: string }[];
+  description?: string | null;
+  subthemes: { id: string; name: string; description?: string | null }[];
+}
+
+/**
+ * Une description trop longue noie la liste et éloigne le document de la
+ * consigne finale. On garde une phrase.
+ */
+export const MAX_DESCRIPTION_CHARS = 140;
+
+function trimDescription(raw: string | null | undefined): string | null {
+  const text = (raw ?? "").replace(/\s+/g, " ").trim();
+  if (text.length === 0) return null;
+  return text.length <= MAX_DESCRIPTION_CHARS
+    ? text
+    : `${text.slice(0, MAX_DESCRIPTION_CHARS - 1).trimEnd()}…`;
 }
 
 /**
@@ -42,6 +63,7 @@ export function buildOptions(themes: ThemeTree[]): ClassifyOption[] {
         themeName: theme.name,
         subthemeId: null,
         subthemeName: null,
+        description: trimDescription(theme.description),
       });
       continue;
     }
@@ -52,6 +74,10 @@ export function buildOptions(themes: ThemeTree[]): ClassifyOption[] {
         themeName: theme.name,
         subthemeId: sub.id,
         subthemeName: sub.name,
+        // La consigne du sous-thème l'emporte : c'est la plus précise. Celle
+        // du thème sert de repli pour ses sous-thèmes non décrits.
+        description:
+          trimDescription(sub.description) ?? trimDescription(theme.description),
       });
     }
   }
@@ -68,10 +94,10 @@ export function buildClassifyPrompt(
   maxContentChars = 3000,
 ): string {
   const list = options
-    .map(
-      (o) =>
-        `${o.index}. ${o.themeName}${o.subthemeName ? ` › ${o.subthemeName}` : ""}`,
-    )
+    .map((o) => {
+      const label = `${o.index}. ${o.themeName}${o.subthemeName ? ` › ${o.subthemeName}` : ""}`;
+      return o.description ? `${label} — ${o.description}` : label;
+    })
     .join("\n");
 
   const doc = [title ? `Titre : ${title}` : "", content.slice(0, maxContentChars)]

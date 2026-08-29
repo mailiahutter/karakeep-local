@@ -163,4 +163,75 @@ export const MIGRATIONS: string[] = [
   ALTER TABLE bookmarks ADD COLUMN theme_source TEXT;
   CREATE INDEX idx_bookmarks_theme ON bookmarks(theme_id, subtheme_id);
   `,
+
+  // 004 — description des thèmes, écrite pour le modèle.
+  //
+  // Un intitulé seul est ambigu : « Moto › Ma sélection » ne dit pas au modèle
+  // s'il s'agit de motos à acheter ou d'itinéraires. La description est la
+  // consigne de rangement que l'utilisateur donne au modèle, dans ses propres
+  // mots ; elle est reprise telle quelle dans la liste des catégories.
+  `
+  ALTER TABLE themes    ADD COLUMN description TEXT;
+  ALTER TABLE subthemes ADD COLUMN description TEXT;
+
+  -- Rattrapage des arborescences déjà semées : sans cela, un utilisateur
+  -- installé avant cette version resterait avec des catégories muettes, donc
+  -- un classement à l'aveugle. Le texte est figé ici, volontairement dupliqué
+  -- depuis DEFAULT_THEMES : une migration ne doit jamais dépendre de code qui
+  -- change. Seules les lignes sans description sont touchées.
+  UPDATE themes SET description = 'Recettes de cuisine et idées de plats à refaire.'
+    WHERE name = 'Recettes' AND description IS NULL;
+  UPDATE subthemes SET description = 'Recettes à base de viande : bœuf, porc, volaille, agneau.'
+    WHERE name = 'Viande' AND description IS NULL;
+  UPDATE subthemes SET description = 'Recettes légères et équilibrées, riches en légumes.'
+    WHERE name = 'Healthy' AND description IS NULL;
+  UPDATE subthemes SET description = 'Recettes riches en protéines, pour la prise de muscle.'
+    WHERE name = 'Plats protéinés' AND description IS NULL;
+  UPDATE subthemes SET description = 'Recettes pauvres en calories, pour la sèche.'
+    WHERE name = 'Perte de graisse' AND description IS NULL;
+  UPDATE subthemes SET description = 'Desserts, pâtisseries, goûters et boissons sucrées.'
+    WHERE name = 'Desserts' AND description IS NULL;
+  UPDATE themes SET description = 'Endroits où partir en voyage sur la route.'
+    WHERE name = 'Destinations roadtrip' AND description IS NULL;
+  UPDATE subthemes SET description = 'Itinéraires et destinations à faire à moto.'
+    WHERE name = 'Roadtrip moto' AND description IS NULL;
+  UPDATE subthemes SET description = 'Itinéraires et destinations à faire en van ou en fourgon.'
+    WHERE name = 'Roadtrip van aménagé' AND description IS NULL;
+  UPDATE subthemes SET description = 'Lieux précis où dormir, se garer ou bivouaquer.'
+    WHERE name = 'Spots et bivouacs' AND description IS NULL;
+  UPDATE themes SET description = 'La moto en tant que machine : modèles, pièces, équipement.'
+    WHERE name = 'Moto' AND description IS NULL;
+  UPDATE subthemes SET description = 'Modèles de motos qui me plaisent ou que j''envisage d''acheter.'
+    WHERE name = 'Ma sélection de motos' AND description IS NULL;
+  UPDATE subthemes SET description = 'Modifications, préparation et personnalisation d''une moto.'
+    WHERE name = 'Tuning moto' AND description IS NULL;
+  UPDATE subthemes SET description = 'Casques, gants, blousons, bagagerie et accessoires du pilote.'
+    WHERE name = 'Équipement' AND description IS NULL;
+  UPDATE themes SET description = 'Vivre et voyager en van aménagé : le véhicule et son aménagement.'
+    WHERE name = 'Vanlife' AND description IS NULL;
+  UPDATE subthemes SET description = 'Plans, agencements et astuces pour aménager l''intérieur d''un van.'
+    WHERE name = 'Idées d''aménagement' AND description IS NULL;
+  UPDATE subthemes SET description = 'Produits précis à acheter pour un van : batterie, frigo, chauffage.'
+    WHERE name = 'Produits et matériel' AND description IS NULL;
+  UPDATE subthemes SET description = 'Entreprises et artisans qui vendent ou aménagent des vans.'
+    WHERE name = 'Fournisseurs de van aménagé' AND description IS NULL;
+  UPDATE themes SET description = 'La voiture : entretien, réparations, améliorations, modèles.'
+    WHERE name = 'Voiture' AND description IS NULL;
+  UPDATE subthemes SET description = 'Modifications et accessoires pour améliorer une voiture.'
+    WHERE name = 'Améliorations' AND description IS NULL;
+  UPDATE subthemes SET description = 'Tutoriels de réparation, entretien, pièces à changer.'
+    WHERE name = 'Entretien et réparation' AND description IS NULL;
+  UPDATE subthemes SET description = 'Modèles de voitures que j''envisage d''acheter.'
+    WHERE name = 'Modèles visés' AND description IS NULL;
+  UPDATE themes SET description = 'La maison : construction, architecture, aménagement, travaux.'
+    WHERE name = 'Maison' AND description IS NULL;
+  UPDATE subthemes SET description = 'Idées d''architecture, plans et styles de maisons.'
+    WHERE name = 'Architecture' AND description IS NULL;
+  UPDATE subthemes SET description = 'Décoration, mobilier et agencement des pièces.'
+    WHERE name = 'Aménagement intérieur' AND description IS NULL;
+  UPDATE subthemes SET description = 'Terrasse, jardin, piscine, clôtures et extérieurs.'
+    WHERE name = 'Extérieur et jardin' AND description IS NULL;
+  UPDATE subthemes SET description = 'Tutoriels de travaux, bricolage et rénovation.'
+    WHERE name = 'Travaux et bricolage' AND description IS NULL;
+  `,
 ];

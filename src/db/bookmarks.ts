@@ -334,3 +334,20 @@ export async function countPendingWork(): Promise<number> {
   );
   return row?.n ?? 0;
 }
+
+/**
+ * Remet en file les favoris que le modèle avait rangés lui-même.
+ *
+ * Modifier l'arborescence ne sert à rien si les liens déjà enregistrés restent
+ * là où ils étaient. Un classement corrigé à la main est épargné : c'est la
+ * seule chose que le modèle ne doit jamais défaire.
+ */
+export async function requeueAutoClassified(): Promise<number> {
+  const db = await getDb();
+  const result = await db.runAsync(
+    `UPDATE bookmarks SET ai_status = 'pending'
+     WHERE archived = 0
+       AND (theme_source IS NULL OR theme_source <> 'human')`,
+  );
+  return result.changes;
+}

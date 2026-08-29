@@ -56,6 +56,14 @@ savoir avant de choisir :
   en cours et ce qui attend, avec un bouton pour relancer tout de suite.
   L'extraction, elle, a besoin de la WebView : elle ne tourne que dans
   l'application ouverte.
+- **Thèmes et sous-thèmes** modifiables : Réglages → « Thèmes et sous-thèmes »,
+  ou le bouton « Gérer les thèmes » de l'onglet Thèmes. Chaque catégorie porte
+  une **description**, et c'est elle que le modèle lit pour ranger un lien —
+  « Moto › Ma sélection » et « Destinations roadtrip › Roadtrip moto » ne se
+  distinguent que par là. Écrite comme on l'expliquerait à quelqu'un
+  (« modèles de motos que j'envisage d'acheter »), elle vaut mieux qu'un
+  intitulé court. Supprimer une catégorie ne supprime aucun lien : ceux qui y
+  étaient redeviennent non rangés.
 - **Recherche plein texte** sur le titre, la description et le contenu extrait,
   classée par pertinence (`bm25`), insensible aux accents.
 - **Tags** générés par le modèle embarqué, complétables et corrigeables à la

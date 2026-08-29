@@ -4,7 +4,7 @@ import { useCallback, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { listThemes, type Theme } from "../../src/db/themes";
-import { EmptyState } from "../../src/ui/components";
+import { Button, EmptyState } from "../../src/ui/components";
 import { radius, spacing, useTheme } from "../../src/ui/theme";
 
 /**
@@ -41,7 +41,7 @@ export default function ThemesScreen() {
         <EmptyState
           icon="albums-outline"
           title="Rien de rangé pour l'instant"
-          message="Les liens enregistrés sont classés automatiquement dans ces thèmes. Tu peux les modifier depuis Réglages → Thèmes."
+          message="Les liens enregistrés sont rangés automatiquement dans ces thèmes. Ajoute, renomme ou supprime les tiens avec le bouton ci-dessous."
         />
       )}
 
@@ -133,6 +133,15 @@ export default function ThemesScreen() {
           </View>
         );
       })}
+
+      {/* L'arborescence appartient à l'utilisateur : l'endroit où il la
+          consulte est aussi l'endroit où il doit pouvoir la modifier. */}
+      <Button
+        label="Gérer les thèmes"
+        icon="options-outline"
+        variant="secondary"
+        onPress={() => router.push("/settings/themes")}
+      />
     </ScrollView>
   );
 }

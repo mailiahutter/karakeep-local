@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
+  MAX_DESCRIPTION_CHARS,
   buildClassifyPrompt,
   buildOptions,
   parseChoice,
@@ -103,4 +104,60 @@ test("zéro et illisible ne rangent nulle part", () => {
 
 test("une arborescence vide ne propose rien", () => {
   assert.deepEqual(buildOptions([]), []);
+});
+
+/** Même arborescence, décrite par l'utilisateur pour guider le modèle. */
+const DECRIT: ThemeTree[] = [
+  {
+    id: "t-moto",
+    name: "Moto",
+    description: "Tout ce qui touche à la moto.",
+    subthemes: [
+      {
+        id: "s-selection",
+        name: "Ma sélection",
+        description: "Modèles de motos que j'envisage d'acheter.",
+      },
+      { id: "s-tuning", name: "Tuning", description: "  " },
+    ],
+  },
+  { id: "t-divers", name: "Divers", subthemes: [] },
+];
+
+test("la consigne de l'utilisateur est donnée au modèle", () => {
+  const p = buildClassifyPrompt(buildOptions(DECRIT), "Yamaha Ténéré 700", "");
+  // Sans elle, « Moto › Ma sélection » ne dit pas s'il s'agit de motos à
+  // acheter ou d'itinéraires.
+  assert.ok(
+    p.includes("1. Moto › Ma sélection — Modèles de motos que j'envisage d'acheter."),
+  );
+});
+
+test("un sous-thème sans consigne hérite de celle du thème", () => {
+  const options = buildOptions(DECRIT);
+  const tuning = options.find((o) => o.subthemeId === "s-tuning");
+  assert.equal(tuning?.description, "Tout ce qui touche à la moto.");
+});
+
+test("une consigne vide ou en blancs ne pollue pas la liste", () => {
+  const options = buildOptions([
+    { id: "t", name: "Vide", description: "   \n  ", subthemes: [] },
+  ]);
+  assert.equal(options[0].description, null);
+  assert.ok(!buildClassifyPrompt(options, "x", "y").includes("—"));
+});
+
+test("une consigne trop longue est coupée", () => {
+  const long = "a".repeat(400);
+  const options = buildOptions([
+    { id: "t", name: "Long", description: long, subthemes: [] },
+  ]);
+  // Une tartine par catégorie éloignerait le document de la consigne finale.
+  assert.equal(options[0].description?.length, MAX_DESCRIPTION_CHARS);
+  assert.ok(options[0].description?.endsWith("…"));
+});
+
+test("l'arborescence sans description reste utilisable telle quelle", () => {
+  const p = buildClassifyPrompt(buildOptions(TREE), "Aménager son van", "");
+  assert.ok(p.includes("3. Vanlife › Idées d'aménagement\n"));
 });
