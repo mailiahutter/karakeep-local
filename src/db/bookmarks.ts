@@ -291,3 +291,46 @@ export async function countBookmarks(): Promise<{
     favourited: row?.favourited ?? 0,
   };
 }
+
+/**
+ * Remet en attente ce qu'un arrêt brutal a laissé en plan.
+ *
+ * `running` signifie « un cycle s'en occupe en ce moment ». Cet état ne vit
+ * que dans le processus : dès que l'application est tuée — l'utilisateur la
+ * balaie, Android la récupère sous pression mémoire, le gestionnaire de
+ * batterie du constructeur la gèle pendant une inférence — plus personne ne le
+ * reprend. La ligne restait « Tags en cours de génération… » indéfiniment,
+ * puisque la file ne va chercher que les `pending`.
+ *
+ * À appeler une fois au démarrage : rien ne peut légitimement être en cours
+ * dans un processus qui vient de naître.
+ */
+export async function resetInterruptedWork(): Promise<{
+  fetch: number;
+  ai: number;
+}> {
+  const db = await getDb();
+  const fetch = await db.runAsync(
+    "UPDATE bookmarks SET fetch_status = 'pending' WHERE fetch_status = 'running'",
+  );
+  const ai = await db.runAsync(
+    "UPDATE bookmarks SET ai_status = 'pending' WHERE ai_status = 'running'",
+  );
+  return { fetch: fetch.changes, ai: ai.changes };
+}
+
+/**
+ * Nombre de favoris encore à traiter, pour l'indicateur d'activité.
+ *
+ * On compte les favoris, pas les étapes : un lien à extraire *et* à analyser
+ * en est un seul aux yeux de l'utilisateur.
+ */
+export async function countPendingWork(): Promise<number> {
+  const db = await getDb();
+  const row = await db.getFirstAsync<{ n: number }>(
+    `SELECT COUNT(*) AS n FROM bookmarks
+     WHERE fetch_status IN ('pending', 'running')
+        OR ai_status    IN ('pending', 'running')`,
+  );
+  return row?.n ?? 0;
+}

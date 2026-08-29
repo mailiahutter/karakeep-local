@@ -1,7 +1,7 @@
 {
   "name": "karakeep-local",
   "version": "1.0.0",
-  "main": "expo-router/entry",
+  "main": "index.js",
   "dependencies": {
     "@expo/metro-runtime": "~57.0.13",
     "@expo/vector-icons": "^15.0.2",
@@ -9,6 +9,7 @@
     "babel-preset-expo": "~57.0.0",
     "expo": "~57.0.15",
     "expo-application": "~57.0.2",
+    "expo-background-task": "~57.0.14",
     "expo-build-properties": "~57.0.13",
     "expo-constants": "~57.0.13",
     "expo-crypto": "~57.0.1",
@@ -24,6 +25,7 @@
     "expo-sqlite": "~57.0.1",
     "expo-status-bar": "~57.0.1",
     "expo-system-ui": "~57.0.2",
+    "expo-task-manager": "~57.0.14",
     "expo-video": "~57.0.2",
     "expo-web-browser": "~57.0.2",
     "llama.rn": "^0.12.9",

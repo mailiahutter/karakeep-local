@@ -89,6 +89,9 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     ],
     // Déclare le service de téléchargement d'arrière-plan dans le manifeste.
     "@kesha-antonov/react-native-background-downloader",
+    // Réveille l'application via WorkManager pour reprendre la file IA
+    // quand elle est fermée.
+    "expo-background-task",
     "./plugins/withAndroidTweaks",
   ],
   extra: {

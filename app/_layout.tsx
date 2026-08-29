@@ -5,6 +5,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { useColorScheme } from "react-native";
 
 import { WebArchiver } from "../src/archive/WebArchiver";
+import { QueueRunner } from "../src/pipeline/QueueRunner";
 import { ShareIntentHandler } from "../src/ui/ShareIntentHandler";
 import { useTheme } from "../src/ui/theme";
 
@@ -27,6 +28,9 @@ export default function RootLayout() {
         {/* Moteur de rendu hors écran : doit rester monté pour que la file
             d'archivage soit consommée, quel que soit l'écran affiché. */}
         <WebArchiver />
+        {/* Relance le traitement au lancement et à chaque retour au premier
+            plan, quel que soit l'onglet affiché. */}
+        <QueueRunner />
         <Stack
           screenOptions={{
             headerStyle: { backgroundColor: t.surface },

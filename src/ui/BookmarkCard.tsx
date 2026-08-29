@@ -48,7 +48,9 @@ function StatusHint({ bookmark }: { bookmark: Bookmark }) {
       <View style={styles.status}>
         <Ionicons name="sparkles-outline" size={13} color={t.textFaint} />
         <Text style={[styles.statusText, { color: t.textFaint }]}>
-          Tags en cours de génération…
+          {/* « en attente » n'est pas « en cours » : la liste ne peut pas
+              savoir laquelle des deux, la fiche le dit précisément. */}
+          En attente d'analyse
         </Text>
       </View>
     );

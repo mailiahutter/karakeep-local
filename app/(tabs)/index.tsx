@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useFocusEffect, useRouter } from "expo-router";
+import { useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import {
   FlatList,
@@ -15,6 +15,7 @@ import type { Bookmark } from "../../src/db/types";
 import { processPending, subscribe } from "../../src/pipeline/queue";
 import { BookmarkCard } from "../../src/ui/BookmarkCard";
 import { EmptyState } from "../../src/ui/components";
+import { QueueBanner } from "../../src/ui/QueueBanner";
 import { notifyBookmarksChanged, useBookmarksRevision } from "../../src/ui/events";
 import { radius, spacing, useTheme } from "../../src/ui/theme";
 
@@ -53,14 +54,6 @@ export default function BookmarksScreen() {
       }
     });
   }, [load]);
-
-  // Au retour sur l'onglet, on relance ce qui restait en attente (partage reçu
-  // pendant que l'app était fermée, échec réseau précédent).
-  useFocusEffect(
-    useCallback(() => {
-      void processPending();
-    }, []),
-  );
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -128,6 +121,8 @@ export default function BookmarksScreen() {
           );
         })}
       </View>
+
+      <QueueBanner />
 
       <FlatList
         data={bookmarks}

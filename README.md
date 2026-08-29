@@ -48,6 +48,14 @@ savoir avant de choisir :
 - **Enregistrer un lien** : « Partager » depuis n'importe quelle application, ou
   le bouton `+`. L'écriture est immédiate ; l'extraction et le tagging suivent
   en arrière-plan.
+- **Traitement d'arrière-plan** : la file repart au lancement, à chaque retour
+  au premier plan, et — application fermée — sur un réveil confié à WorkManager.
+  Le système choisit le moment à partir d'un intervalle minimal de 15 minutes :
+  un lien partagé puis l'application aussitôt refermée est traité dans le
+  quart d'heure qui suit, pas à la seconde. Le bandeau d'accueil dit ce qui est
+  en cours et ce qui attend, avec un bouton pour relancer tout de suite.
+  L'extraction, elle, a besoin de la WebView : elle ne tourne que dans
+  l'application ouverte.
 - **Recherche plein texte** sur le titre, la description et le contenu extrait,
   classée par pertinence (`bm25`), insensible aux accents.
 - **Tags** générés par le modèle embarqué, complétables et corrigeables à la

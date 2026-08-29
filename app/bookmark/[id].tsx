@@ -26,7 +26,14 @@ import { attachTags, detachTag } from "../../src/db/tags";
 import { assignTheme, listThemes, type Theme } from "../../src/db/themes";
 import type { Bookmark } from "../../src/db/types";
 import { hostLabel } from "../../src/db/urls";
-import { retryBookmark } from "../../src/pipeline/queue";
+import { aiWaitLabel } from "../../src/pipeline/policy";
+import {
+  queueState,
+  retryAi,
+  subscribe,
+  type QueueState,
+  retryBookmark,
+} from "../../src/pipeline/queue";
 import { Button, Card, Chip, Row } from "../../src/ui/components";
 import { notifyBookmarksChanged } from "../../src/ui/events";
 import { radius, spacing, useTheme } from "../../src/ui/theme";
@@ -44,6 +51,7 @@ export default function BookmarkScreen() {
   const [assets, setAssets] = useState<Asset[]>([]);
   const [themes, setThemes] = useState<Theme[]>([]);
   const [picking, setPicking] = useState(false);
+  const [queue, setQueue] = useState<QueueState>(queueState);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -58,6 +66,19 @@ export default function BookmarkScreen() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // L'étape IA se termine sans que rien ne redessine la fiche : sans cette
+  // écoute, les tags apparaissaient seulement après un aller-retour manuel.
+  useEffect(
+    () =>
+      subscribe((event) => {
+        setQueue(queueState());
+        if (event.type === "bookmark-updated" && event.bookmarkId === id) {
+          void load();
+        }
+      }),
+    [id, load],
+  );
 
   const mutate = useCallback(
     async (fn: () => Promise<void>) => {
@@ -88,6 +109,14 @@ export default function BookmarkScreen() {
     bookmark.aiStatus === "skipped" ||
     bookmark.aiStatus === "pending" ||
     bookmark.aiStatus === "running";
+  const waitLabel = aiWaitLabel(
+    bookmark.aiStatus,
+    queue.phase,
+    queue.bookmarkId === bookmark.id,
+  );
+  // Le modèle travaille sur cette fiche en ce moment : la relancer
+  // l'interromprait pour rien.
+  const aiWorkingHere = queue.bookmarkId === bookmark.id;
 
   return (
     <ScrollView
@@ -287,9 +316,30 @@ export default function BookmarkScreen() {
             >
               {bookmark.aiStatus === "skipped"
                 ? `Tagging non effectué : ${bookmark.aiError ?? "raison inconnue"}. Vérifie Réglages → Modèle IA.`
-                : "Tags en cours de génération…"}
+                : (waitLabel ?? "En attente d'analyse.")}
             </Text>
           </Row>
+        )}
+
+        {aiIncomplete && !aiWorkingHere && (
+          <Button
+            label="Relancer l'analyse"
+            icon="sparkles-outline"
+            variant="secondary"
+            loading={retrying}
+            onPress={() => {
+              setRetrying(true);
+              void (async () => {
+                try {
+                  await retryAi(bookmark.id);
+                  notifyBookmarksChanged();
+                  await load();
+                } finally {
+                  setRetrying(false);
+                }
+              })();
+            }}
+          />
         )}
 
         <TextInput
