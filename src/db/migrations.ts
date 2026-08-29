@@ -249,4 +249,33 @@ export const MIGRATIONS: string[] = [
   UPDATE themes SET icon = '🚗' WHERE name = 'Voiture' AND icon = 'car-sport-outline';
   UPDATE themes SET icon = '🏠' WHERE name = 'Maison' AND icon = 'home-outline';
   `,
+
+  // 006 — avis sur les propositions du modèle.
+  //
+  // L'application ne peut s'améliorer que si l'on sait où elle se trompe.
+  // Chaque avis fige ce que le modèle avait proposé au moment du jugement :
+  // sans cette copie, une correction faite ensuite rendrait l'avis
+  // incompréhensible à la relecture.
+  //
+  // Pas de clé étrangère vers `bookmarks` : l'avis porte sur le comportement
+  // du modèle, pas sur le lien. Supprimer un favori ne doit pas effacer un
+  // retour qui n'a pas encore été transmis.
+  `
+  CREATE TABLE reviews (
+    id              TEXT PRIMARY KEY NOT NULL,
+    bookmark_id     TEXT NOT NULL,
+    created_at      INTEGER NOT NULL,
+    -- 'good' | 'bad' | NULL (sans avis), pour chacun des quatre aspects
+    theme_verdict   TEXT,
+    tags_verdict    TEXT,
+    media_verdict   TEXT,
+    summary_verdict TEXT,
+    comment         TEXT,
+    -- Copie JSON de ce que le modèle avait proposé.
+    snapshot        TEXT NOT NULL,
+    exported_at     INTEGER
+  );
+  CREATE UNIQUE INDEX idx_reviews_bookmark ON reviews(bookmark_id);
+  CREATE INDEX idx_reviews_export ON reviews(exported_at, created_at);
+  `,
 ];

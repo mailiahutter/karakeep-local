@@ -70,6 +70,13 @@ savoir avant de choisir :
   temps acceptable : compter 5 à 10 minutes par lien, contre 1 à 3 pour un 3B.
   Chaque inférence a une limite de temps ; au-delà, elle est arrêtée et le lien
   passe en erreur avec la raison, plutôt que de bloquer la file.
+- **Relecture des propositions** : à l'ouverture, l'application récapitule ce
+  que le modèle a décidé — thème, tags, images, résumé — et attend un verdict
+  par aspect, plus un commentaire libre. Ce qui est jugé est figé au moment de
+  l'avis : une correction faite ensuite ne rend pas le retour incompréhensible.
+  Réglages → « Retours sur l'IA » exporte les avis non encore transmis dans un
+  fichier Markdown, via la feuille de partage d'Android. Rien ne quitte
+  l'appareil sans cette action.
 - **Recherche plein texte** sur le titre, la description et le contenu extrait,
   classée par pertinence (`bm25`), insensible aux accents.
 - **Tags** générés par le modèle embarqué, complétables et corrigeables à la

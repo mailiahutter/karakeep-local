@@ -116,6 +116,13 @@ export default function SettingsScreen() {
           />
 
           <NavRow
+            icon="chatbubble-ellipses-outline"
+            label="Retours sur l'IA"
+            hint="Juge les propositions du modèle, puis transmets tes remarques."
+            onPress={() => router.push("/settings/feedback")}
+          />
+
+          <NavRow
             icon="logo-instagram"
             label="Compte Instagram"
             hint="Sans session, Instagram masque légendes et carrousels."
@@ -127,6 +134,12 @@ export default function SettingsScreen() {
             hint="Génère des tags après chaque enregistrement."
             value={settings.autoTag}
             onChange={(v) => void update("autoTag", v)}
+          />
+          <ToggleRow
+            label="Proposer la relecture à l'ouverture"
+            hint="Récapitule ce que le modèle a proposé pour que tu dises si c'est juste."
+            value={settings.reviewOnLaunch}
+            onChange={(v) => void update("reviewOnLaunch", v)}
           />
           <ToggleRow
             label="Lire le contenu des pages"

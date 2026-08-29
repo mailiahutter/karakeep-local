@@ -26,6 +26,8 @@ export interface Settings {
   autoFetch: boolean;
   /** Ne lancer le tagging que sur secteur, l'inférence étant gourmande. */
   aiOnlyWhenCharging: boolean;
+  /** Proposer la relecture des propositions du modèle à l'ouverture. */
+  reviewOnLaunch: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -36,6 +38,7 @@ export const DEFAULT_SETTINGS: Settings = {
   autoTag: true,
   autoFetch: true,
   aiOnlyWhenCharging: false,
+  reviewOnLaunch: true,
 };
 
 export async function loadSettings(): Promise<Settings> {
