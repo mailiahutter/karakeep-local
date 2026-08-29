@@ -16,6 +16,15 @@ export interface ModelDescriptor {
   bytes: number;
   /** RAM totale de l'appareil recommandée. */
   ramHint: string;
+  /**
+   * Temps d'analyse d'un lien, les trois demandes cumulées, sur un
+   * téléphone récent.
+   *
+   * C'est le processeur qui décide ici, pas la mémoire : llama.cpp tourne sur
+   * les cœurs, pas sur le GPU. Un appareil peut loger un modèle de 7 milliards
+   * de paramètres sans pouvoir le faire répondre en un temps acceptable.
+   */
+  speedHint: string;
   url: string;
   /** Nom du fichier une fois enregistré sur l'appareil. */
   fileName: string;
@@ -28,16 +37,18 @@ export const MODELS: ModelDescriptor[] = [
     label: "Qwen 2.5 7B Instruct",
     bytes: 4_683_074_240,
     ramHint: "12 Go et plus",
+    speedHint: "environ 5 à 10 min par lien",
     url: "https://huggingface.co/bartowski/Qwen2.5-7B-Instruct-GGUF/resolve/main/Qwen2.5-7B-Instruct-Q4_K_M.gguf",
     fileName: "Qwen2.5-7B-Instruct-Q4_K_M.gguf",
     notes:
-      "Nettement plus fin sur le classement et les résumés. À réserver aux appareils confortables : il occupe environ 5,5 Go de mémoire en usage.",
+      "Le plus fin sur le classement, mais lent : il occupe environ 5,5 Go de mémoire et tourne sur le processeur, pas sur le GPU. À réserver à qui accepte d'attendre plusieurs minutes par lien.",
   },
   {
     id: "qwen2.5-3b-instruct-q4km",
     label: "Qwen 2.5 3B Instruct",
     bytes: 1_929_903_264,
     ramHint: "8 Go et plus",
+    speedHint: "environ 1 à 3 min par lien",
     url: "https://huggingface.co/bartowski/Qwen2.5-3B-Instruct-GGUF/resolve/main/Qwen2.5-3B-Instruct-Q4_K_M.gguf",
     fileName: "Qwen2.5-3B-Instruct-Q4_K_M.gguf",
     notes:
@@ -48,6 +59,7 @@ export const MODELS: ModelDescriptor[] = [
     label: "Llama 3.2 3B Instruct",
     bytes: 2_019_377_696,
     ramHint: "8 Go et plus",
+    speedHint: "environ 1 à 3 min par lien",
     url: "https://huggingface.co/bartowski/Llama-3.2-3B-Instruct-GGUF/resolve/main/Llama-3.2-3B-Instruct-Q4_K_M.gguf",
     fileName: "Llama-3.2-3B-Instruct-Q4_K_M.gguf",
     notes: "Alternative de qualité comparable, un peu plus lourde.",
@@ -57,6 +69,7 @@ export const MODELS: ModelDescriptor[] = [
     label: "Qwen 2.5 1.5B Instruct",
     bytes: 986_048_768,
     ramHint: "6 Go",
+    speedHint: "moins d'une minute par lien",
     url: "https://huggingface.co/bartowski/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/Qwen2.5-1.5B-Instruct-Q4_K_M.gguf",
     fileName: "Qwen2.5-1.5B-Instruct-Q4_K_M.gguf",
     notes: "Deux fois plus rapide, tags un peu plus génériques.",
@@ -66,6 +79,7 @@ export const MODELS: ModelDescriptor[] = [
     label: "Gemma 3 1B Instruct",
     bytes: 806_058_272,
     ramHint: "4 Go",
+    speedHint: "quelques dizaines de secondes",
     url: "https://huggingface.co/unsloth/gemma-3-1b-it-GGUF/resolve/main/gemma-3-1b-it-Q4_K_M.gguf",
     fileName: "gemma-3-1b-it-Q4_K_M.gguf",
     notes: "Le plus léger, pour les appareils modestes.",

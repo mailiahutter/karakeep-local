@@ -14,6 +14,8 @@ export interface TaggingOptions {
   language: string;
   tagStyle: TagStyle;
   onLoadProgress?: (percent: number) => void;
+  timeoutMs?: number;
+  onToken?: (produced: number) => void;
 }
 
 /**
@@ -48,6 +50,8 @@ export async function generateTags(
       prompt,
       jsonSchema: TAGS_JSON_SCHEMA,
       maxTokens: 200,
+      timeoutMs: opts.timeoutMs,
+      onToken: opts.onToken,
     },
     { onProgress: opts.onLoadProgress },
   );

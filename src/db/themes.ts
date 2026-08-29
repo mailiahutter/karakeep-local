@@ -55,7 +55,7 @@ export const DEFAULT_THEMES: {
 }[] = [
   {
     name: "Recettes",
-    icon: "restaurant-outline",
+    icon: "🍽️",
     description: "Recettes de cuisine et idées de plats à refaire.",
     subthemes: [
       { name: "Viande", description: "Recettes à base de viande : bœuf, porc, volaille, agneau." },
@@ -67,7 +67,7 @@ export const DEFAULT_THEMES: {
   },
   {
     name: "Destinations roadtrip",
-    icon: "map-outline",
+    icon: "🗺️",
     description: "Endroits où partir en voyage sur la route.",
     subthemes: [
       { name: "Roadtrip moto", description: "Itinéraires et destinations à faire à moto." },
@@ -77,7 +77,7 @@ export const DEFAULT_THEMES: {
   },
   {
     name: "Moto",
-    icon: "bicycle-outline",
+    icon: "🏍️",
     description: "La moto en tant que machine : modèles, pièces, équipement.",
     subthemes: [
       { name: "Ma sélection de motos", description: "Modèles de motos qui me plaisent ou que j'envisage d'acheter." },
@@ -87,7 +87,7 @@ export const DEFAULT_THEMES: {
   },
   {
     name: "Vanlife",
-    icon: "bus-outline",
+    icon: "🚐",
     description: "Vivre et voyager en van aménagé : le véhicule et son aménagement.",
     subthemes: [
       { name: "Idées d'aménagement", description: "Plans, agencements et astuces pour aménager l'intérieur d'un van." },
@@ -97,7 +97,7 @@ export const DEFAULT_THEMES: {
   },
   {
     name: "Voiture",
-    icon: "car-sport-outline",
+    icon: "🚗",
     description: "La voiture : entretien, réparations, améliorations, modèles.",
     subthemes: [
       { name: "Améliorations", description: "Modifications et accessoires pour améliorer une voiture." },
@@ -107,7 +107,7 @@ export const DEFAULT_THEMES: {
   },
   {
     name: "Maison",
-    icon: "home-outline",
+    icon: "🏠",
     description: "La maison : construction, architecture, aménagement, travaux.",
     subthemes: [
       { name: "Architecture", description: "Idées d'architecture, plans et styles de maisons." },
@@ -215,7 +215,7 @@ function cleanDescription(raw: string | null | undefined): string | null {
 
 export async function createTheme(
   name: string,
-  icon = "folder-outline",
+  icon = "📁",
   description?: string | null,
 ): Promise<string> {
   const db = await getDb();

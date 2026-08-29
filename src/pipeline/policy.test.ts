@@ -2,11 +2,13 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
+  AI_TIMEOUTS,
   HEARTBEAT_STALE_MS,
   aiWaitLabel,
   budgetExhausted,
   isReadyForAi,
   lockIsHeld,
+  shouldSkipSummary,
 } from "./policy.ts";
 
 test("le tagging attend la fin de l'extraction", () => {
@@ -69,4 +71,18 @@ test("aucun battement, aucun verrou", () => {
 test("une horloge revenue en arrière ne bloque pas définitivement", () => {
   // Changement de fuseau ou réglage manuel : le battement est dans le futur.
   assert.equal(lockIsHeld(2_000_000, 1_000_000), false);
+});
+
+test("le résumé est abandonné quand le modèle traîne", () => {
+  // Le classement et les tags ont déjà pris deux minutes : un résumé en
+  // ajouterait trois, et le lien suivant n'arriverait jamais.
+  assert.equal(shouldSkipSummary(120_000), true);
+  assert.equal(shouldSkipSummary(20_000), false);
+});
+
+test("le classement a le budget le plus court, le résumé le plus long", () => {
+  // Il répond par un nombre : s'il n'a rien produit en une minute et demie,
+  // ce n'est pas une question de longueur de réponse.
+  assert.ok(AI_TIMEOUTS.classify < AI_TIMEOUTS.tags);
+  assert.ok(AI_TIMEOUTS.tags < AI_TIMEOUTS.summary);
 });

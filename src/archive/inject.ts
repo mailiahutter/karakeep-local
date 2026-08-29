@@ -76,6 +76,25 @@ export function buildInjectedScript(opts: ArchiveOptions): string {
     return text.replace(/[ \\t\\u00a0]+/g, ' ').replace(/\\n{3,}/g, '\\n\\n').trim();
   }
 
+  // D'où vient l'image dans la page. Un bandeau de moyens de paiement vit dans
+  // le pied de page ; la photo du sujet vit dans l'article. C'est le signal le
+  // plus fiable, et le seul qui ne dépende pas du nom du fichier.
+  function zoneOf(el) {
+    for (var node = el; node && node !== document.body; node = node.parentElement) {
+      var tag = (node.tagName || '').toLowerCase();
+      if (tag === 'footer' || tag === 'nav' || tag === 'header' || tag === 'aside') {
+        return 'chrome';
+      }
+      if (tag === 'article' || tag === 'main') return 'main';
+      var role = node.getAttribute ? node.getAttribute('role') : null;
+      if (role === 'banner' || role === 'contentinfo' || role === 'navigation') {
+        return 'chrome';
+      }
+      if (role === 'main') return 'main';
+    }
+    return 'other';
+  }
+
   function collectImages() {
     var out = [];
     var seen = {};
@@ -92,7 +111,8 @@ export function buildInjectedScript(opts: ArchiveOptions): string {
         url: abs,
         width: imgs[i].naturalWidth,
         height: imgs[i].naturalHeight,
-        alt: imgs[i].alt || null
+        alt: imgs[i].alt || null,
+        zone: zoneOf(imgs[i])
       });
     }
     return out;

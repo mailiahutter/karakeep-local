@@ -64,6 +64,12 @@ savoir avant de choisir :
   (« modèles de motos que j'envisage d'acheter »), elle vaut mieux qu'un
   intitulé court. Supprimer une catégorie ne supprime aucun lien : ceux qui y
   étaient redeviennent non rangés.
+- **Choix du modèle** : c'est le processeur qui décide, pas la mémoire —
+  llama.cpp tourne sur les cœurs, pas sur le GPU. Un téléphone peut loger un
+  modèle de 7 milliards de paramètres sans pouvoir le faire répondre en un
+  temps acceptable : compter 5 à 10 minutes par lien, contre 1 à 3 pour un 3B.
+  Chaque inférence a une limite de temps ; au-delà, elle est arrêtée et le lien
+  passe en erreur avec la raison, plutôt que de bloquer la file.
 - **Recherche plein texte** sur le titre, la description et le contenu extrait,
   classée par pertinence (`bm25`), insensible aux accents.
 - **Tags** générés par le modèle embarqué, complétables et corrigeables à la

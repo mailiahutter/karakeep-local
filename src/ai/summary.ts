@@ -16,7 +16,10 @@ import {
 export async function generateSummary(
   title: string | null,
   content: string,
-  opts: SummaryOptions,
+  opts: SummaryOptions & {
+    timeoutMs?: number;
+    onToken?: (produced: number) => void;
+  },
 ): Promise<string | null> {
   // Sous ce seuil, un résumé serait plus long que la source.
   if (content.trim().length < 400) return null;
@@ -30,6 +33,8 @@ export async function generateSummary(
       opts.maxContentChars,
     ),
     maxTokens: 300,
+    timeoutMs: opts.timeoutMs,
+    onToken: opts.onToken,
   });
 
   const cleaned = cleanSummary(raw);

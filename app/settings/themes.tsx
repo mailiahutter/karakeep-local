@@ -27,6 +27,8 @@ import {
   type Theme,
 } from "../../src/db/themes";
 import { Button, Card, Row } from "../../src/ui/components";
+import { QUICK_EMOJI, normalizeIconInput } from "../../src/ui/icons";
+import { ThemeIcon } from "../../src/ui/ThemeIcon";
 import { notifyBookmarksChanged } from "../../src/ui/events";
 import { radius, spacing, useTheme } from "../../src/ui/theme";
 
@@ -42,26 +44,6 @@ import { radius, spacing, useTheme } from "../../src/ui/theme";
  * « Moto › Ma sélection » de « Destinations roadtrip › Roadtrip moto », dont
  * les intitulés seuls ne disent rien.
  */
-
-/** Icônes proposées à la création d'un thème. */
-const ICONS: (keyof typeof Ionicons.glyphMap)[] = [
-  "folder-outline",
-  "restaurant-outline",
-  "map-outline",
-  "bicycle-outline",
-  "bus-outline",
-  "car-sport-outline",
-  "home-outline",
-  "barbell-outline",
-  "briefcase-outline",
-  "book-outline",
-  "musical-notes-outline",
-  "camera-outline",
-  "leaf-outline",
-  "construct-outline",
-  "airplane-outline",
-  "cash-outline",
-];
 
 type Editing =
   | { kind: "theme"; id: string | null; name: string; description: string; icon: string }
@@ -216,14 +198,7 @@ export default function ThemesSettingsScreen() {
                 style={styles.themeHeader}
                 accessibilityRole="button"
               >
-                <Ionicons
-                  name={
-                    (theme.icon as keyof typeof Ionicons.glyphMap) ??
-                    "folder-outline"
-                  }
-                  size={20}
-                  color={t.accent}
-                />
+                <ThemeIcon icon={theme.icon} size={20} color={t.accent} />
                 <View style={styles.grow}>
                   <Text style={[styles.themeName, { color: t.text }]}>
                     {theme.name}
@@ -319,7 +294,7 @@ export default function ThemesSettingsScreen() {
                           id: theme.id,
                           name: theme.name,
                           description: theme.description ?? "",
-                          icon: theme.icon ?? "folder-outline",
+                          icon: theme.icon ?? "📁",
                         })
                       }
                     />
@@ -347,7 +322,7 @@ export default function ThemesSettingsScreen() {
               id: null,
               name: "",
               description: "",
-              icon: "folder-outline",
+              icon: "📁",
             })
           }
         />
@@ -478,15 +453,42 @@ function EditorModal({
           {isTheme && (
             <>
               <Text style={[styles.label, { color: t.textMuted }]}>Icône</Text>
+              <Text style={[styles.help, { color: t.textFaint }]}>
+                N'importe quel emoji du clavier — ouvre l'onglet emoji et
+                choisis. Les raccourcis ci-dessous ne sont qu'un départ.
+              </Text>
+              <Row>
+                <View
+                  style={[
+                    styles.iconPreview,
+                    { borderColor: t.border, backgroundColor: t.bg },
+                  ]}
+                >
+                  <ThemeIcon icon={editing.icon} size={26} color={t.accent} />
+                </View>
+                <TextInput
+                  value={editing.icon}
+                  onChangeText={(raw) =>
+                    onChange({ ...editing, icon: normalizeIconInput(raw) ?? "" })
+                  }
+                  placeholder="🚐"
+                  placeholderTextColor={t.textFaint}
+                  style={[
+                    styles.input,
+                    styles.grow,
+                    { color: t.text, borderColor: t.border, backgroundColor: t.bg },
+                  ]}
+                />
+              </Row>
               <View style={styles.icons}>
-                {ICONS.map((name) => {
-                  const active = editing.icon === name;
+                {QUICK_EMOJI.map((emoji) => {
+                  const active = editing.icon === emoji;
                   return (
                     <Pressable
-                      key={name}
-                      onPress={() => onChange({ ...editing, icon: name })}
+                      key={emoji}
+                      onPress={() => onChange({ ...editing, icon: emoji })}
                       accessibilityRole="button"
-                      accessibilityLabel={name}
+                      accessibilityLabel={`Icône ${emoji}`}
                       style={[
                         styles.iconChoice,
                         {
@@ -495,11 +497,7 @@ function EditorModal({
                         },
                       ]}
                     >
-                      <Ionicons
-                        name={name}
-                        size={20}
-                        color={active ? t.accent : t.textMuted}
-                      />
+                      <Text style={styles.quickEmoji}>{emoji}</Text>
                     </Pressable>
                   );
                 })}
@@ -565,6 +563,15 @@ const styles = StyleSheet.create({
   },
   multiline: { minHeight: 88, textAlignVertical: "top" },
   icons: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
+  iconPreview: {
+    width: 48,
+    height: 48,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  quickEmoji: { fontSize: 21 },
   iconChoice: {
     width: 44,
     height: 44,

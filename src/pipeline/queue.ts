@@ -2,7 +2,13 @@ import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
 
 import { captureBookmark } from "./capture";
 import { beat, releaseHeartbeat } from "./lock";
-import { budgetExhausted, isReadyForAi, type WorkPhase } from "./policy";
+import {
+  AI_TIMEOUTS,
+  budgetExhausted,
+  isReadyForAi,
+  shouldSkipSummary,
+  type WorkPhase,
+} from "./policy";
 import { generateTags } from "../ai/tagging";
 import { generateSummary } from "../ai/summary";
 import { classifyBookmark } from "../ai/classification";
@@ -39,9 +45,14 @@ export type QueueEvent =
   | { type: "fetching"; bookmarkId: string; url: string }
   | { type: "tagging"; bookmarkId: string; url: string }
   | { type: "loading-model"; percent: number }
+  /** Le modèle écrit : la seule preuve de vie pendant une longue inférence. */
+  | { type: "generating"; step: AiStep; tokens: number }
   | { type: "progress"; done: number; total: number }
   | { type: "bookmark-updated"; bookmarkId: string }
   | { type: "error"; bookmarkId: string; message: string };
+
+/** Les trois demandes faites au modèle pour un même favori. */
+export type AiStep = "classify" | "tags" | "summary";
 
 type Listener = (event: QueueEvent) => void;
 
@@ -153,21 +164,17 @@ async function runTagStage(deadline: () => boolean): Promise<number> {
     setPhase("tagging", bookmark.id);
     emit({ type: "tagging", bookmarkId: bookmark.id, url: bookmark.url });
     await setAiStatus(bookmark.id, "running");
-    try {
-      const tags = await generateTags(bookmark, {
-        modelPath,
-        language: settings.aiLanguage,
-        tagStyle: settings.tagStyle,
-        onLoadProgress: (percent) =>
-          emit({ type: "loading-model", percent }),
-      });
-      if (tags.length > 0) {
-        await attachTags(bookmark.id, tags, "ai");
-      }
 
-      await beat();
-      // Rangement thématique : un choix dans une liste fermée, la tâche la
-      // plus fiable des trois pour un modèle embarqué.
+    const startedAt = Date.now();
+    const onLoadProgress = (percent: number) =>
+      emit({ type: "loading-model", percent });
+    const tokens = (step: AiStep) => (produced: number) =>
+      emit({ type: "generating", step, tokens: produced });
+
+    try {
+      // Le rangement d'abord. C'est ce que l'utilisateur vient chercher, c'est
+      // la question la plus simple posée au modèle — un numéro dans une liste
+      // — et c'est donc ce qui doit aboutir même si la suite est abandonnée.
       if (!(await isHumanClassified(bookmark.id))) {
         const themes = await listThemes();
         const placed = await classifyBookmark(
@@ -186,6 +193,11 @@ async function runTagStage(deadline: () => boolean): Promise<number> {
           bookmark.title,
           bookmark.content ?? "",
           modelPath,
+          {
+            timeoutMs: AI_TIMEOUTS.classify,
+            onToken: tokens("classify"),
+            onLoadProgress,
+          },
         );
         if (placed) {
           await assignTheme(
@@ -194,24 +206,47 @@ async function runTagStage(deadline: () => boolean): Promise<number> {
             placed.subthemeId,
             "ai",
           );
+          emit({ type: "bookmark-updated", bookmarkId: bookmark.id });
         }
       }
 
       await beat();
-      // Le résumé suit : le modèle est déjà chargé en mémoire, les inférences
-      // suivantes coûtent donc bien moins que la première.
-      if (bookmark.content && bookmark.content.trim().length > 0) {
-        const summary = await generateSummary(
-          bookmark.title,
-          bookmark.content,
-          { modelPath, language: settings.aiLanguage },
-        );
+      const tags = await generateTags(bookmark, {
+        modelPath,
+        language: settings.aiLanguage,
+        tagStyle: settings.tagStyle,
+        timeoutMs: AI_TIMEOUTS.tags,
+        onToken: tokens("tags"),
+        onLoadProgress,
+      });
+      if (tags.length > 0) {
+        await attachTags(bookmark.id, tags, "ai");
+        emit({ type: "bookmark-updated", bookmarkId: bookmark.id });
+      }
+
+      await beat();
+      // Le résumé en dernier : c'est la réponse la plus longue à produire,
+      // donc la seule qu'on puisse sacrifier sans perdre l'essentiel.
+      const elapsed = Date.now() - startedAt;
+      if (
+        bookmark.content &&
+        bookmark.content.trim().length > 0 &&
+        !shouldSkipSummary(elapsed)
+      ) {
+        const summary = await generateSummary(bookmark.title, bookmark.content, {
+          modelPath,
+          language: settings.aiLanguage,
+          timeoutMs: AI_TIMEOUTS.summary,
+          onToken: tokens("summary"),
+        });
         if (summary) await setSummary(bookmark.id, summary);
       }
 
       await setAiStatus(bookmark.id, "success");
     } catch (err) {
-      const message = `Tagging impossible : ${(err as Error).message}`;
+      // Le classement et les tags déjà obtenus sont conservés : l'échec d'une
+      // étape ne doit pas effacer celles qui ont abouti.
+      const message = `Analyse incomplète : ${(err as Error).message}`;
       await setAiStatus(bookmark.id, "error", message);
       emit({ type: "error", bookmarkId: bookmark.id, message });
     }

@@ -66,7 +66,7 @@ export function buildTaggingPrompt(input: TaggingPromptInput): string {
     tagStyle,
     // ~4 caractères par jeton : 6 000 caractères tiennent largement dans une
     // fenêtre de 4096 jetons avec la consigne et la réponse.
-    maxContentChars = 6000,
+    maxContentChars = 2500,
   } = input;
 
   const style = tagStyleInstruction(tagStyle);
@@ -226,7 +226,7 @@ export function buildSummaryPrompt(
   title: string | null,
   content: string,
   language: string,
-  maxContentChars = 6000,
+  maxContentChars = 3500,
 ): string {
   const body = preprocessContent(
     [title ? `Titre : ${title}` : "", stripBoilerplate(content).slice(0, maxContentChars)]

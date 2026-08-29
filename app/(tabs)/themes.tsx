@@ -5,6 +5,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { listThemes, type Theme } from "../../src/db/themes";
 import { Button, EmptyState } from "../../src/ui/components";
+import { ThemeIcon } from "../../src/ui/ThemeIcon";
 import { radius, spacing, useTheme } from "../../src/ui/theme";
 
 /**
@@ -62,14 +63,7 @@ export default function ThemesScreen() {
               style={styles.header}
               accessibilityRole="button"
             >
-              <Ionicons
-                name={
-                  (theme.icon as keyof typeof Ionicons.glyphMap) ??
-                  "folder-outline"
-                }
-                size={21}
-                color={t.accent}
-              />
+              <ThemeIcon icon={theme.icon} size={21} color={t.accent} />
               <Text style={[styles.themeName, { color: t.text }]}>
                 {theme.name}
               </Text>

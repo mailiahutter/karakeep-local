@@ -3,6 +3,8 @@ export interface CapturedImage {
   width: number;
   height: number;
   alt: string | null;
+  /** Emplacement dans la page : voir `images.ts`. */
+  zone?: import("./images").ImageZone;
 }
 
 export interface CapturedVideo {

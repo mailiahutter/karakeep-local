@@ -11,6 +11,7 @@ import {
   mediaIdentity,
   pickCarousel,
 } from "../archive/instagram";
+import { pickImages } from "../archive/images";
 import { enqueue, isWorkerReady } from "../archive/queue";
 import type { ArchiveResult, CapturedImage } from "../archive/types";
 import { getDb } from "../db/client";
@@ -240,16 +241,13 @@ export async function captureBookmark(
     // lecteur : une seule suffit comme illustration.
     if (outcome.videos > 0) images = images.slice(0, 2);
   } else {
-    images = [...page.images].sort(
-      (a, b) => b.width * b.height - a.width * a.height,
-    );
-    if (kind === "youtube") {
-      const thumb = youtubeThumbnail(url);
-      if (thumb) {
-        images.unshift({ url: thumb, width: 1280, height: 720, alt: null });
-      }
-    }
-    images = images.slice(0, plan.maxImages);
+    // La vignette du site — son `og:image` — passe en tête : c'est l'image
+    // qu'il a lui-même choisie pour représenter la page, et celle que
+    // l'application affiche déjà. Ne pas la conserver revenait à montrer une
+    // photo qui s'évapore le jour où le site ferme.
+    const ogImage =
+      kind === "youtube" ? (youtubeThumbnail(url) ?? page.imageUrl) : page.imageUrl;
+    images = pickImages(page.images, { ogImage, max: plan.maxImages });
   }
 
   for (const img of images) {

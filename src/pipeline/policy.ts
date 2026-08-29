@@ -82,3 +82,31 @@ export function lockIsHeld(
   if (heartbeat > now) return false;
   return now - heartbeat < staleMs;
 }
+
+/**
+ * Temps accordé à chaque inférence.
+ *
+ * Le classement passe en premier et reçoit le budget le plus court : sa
+ * réponse tient en un nombre, et c'est celle qui compte le plus pour
+ * l'utilisateur. Le résumé, le plus coûteux, passe en dernier — s'il doit être
+ * sacrifié, autant que ce soit lui.
+ */
+export const AI_TIMEOUTS = {
+  classify: 90_000,
+  tags: 150_000,
+  summary: 180_000,
+} as const;
+
+/**
+ * Au-delà de ce temps passé sur le classement et les tags, le modèle tourne
+ * trop lentement sur cet appareil pour qu'un résumé soit raisonnable : trois
+ * minutes de plus par lien bloqueraient toute la file.
+ */
+export const SUMMARY_BUDGET_MS = 100_000;
+
+export function shouldSkipSummary(
+  elapsedMs: number,
+  budgetMs: number = SUMMARY_BUDGET_MS,
+): boolean {
+  return elapsedMs >= budgetMs;
+}

@@ -240,7 +240,8 @@ export default function ModelScreen() {
                   {model.label}
                 </Text>
                 <Text style={[styles.meta, { color: t.textFaint }]}>
-                  {formatBytes(model.bytes)} · RAM conseillée : {model.ramHint}
+                  {formatBytes(model.bytes)} · RAM conseillée :{" "}
+                  {model.ramHint} · {model.speedHint}
                 </Text>
               </View>
               {isInstalled && (

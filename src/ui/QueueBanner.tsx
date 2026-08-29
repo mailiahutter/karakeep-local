@@ -14,6 +14,13 @@ import { radius, spacing, useTheme } from "./theme";
  * reste des heures en attente ou s'il est réellement en train d'être analysé.
  * L'utilisateur n'avait aucun moyen de faire la différence, ni de relancer.
  */
+/** Ce que le modèle est en train de produire. */
+const STEP_LABEL = {
+  classify: "Rangement par thème",
+  tags: "Génération des tags",
+  summary: "Rédaction du résumé",
+} as const;
+
 export function QueueBanner() {
   const t = useTheme();
   const revision = useBookmarksRevision();
@@ -36,7 +43,17 @@ export function QueueBanner() {
             setLabel("Analyse par le modèle…");
             break;
           case "loading-model":
-            setLabel(`Chargement du modèle ${Math.round(event.percent)} %`);
+            // « 100 % » restait affiché pendant toute l'inférence qui suit :
+            // le chargement était fini, et l'écran laissait croire qu'il
+            // durait des heures.
+            setLabel(
+              event.percent >= 100
+                ? "Modèle chargé, analyse en cours…"
+                : `Chargement du modèle ${Math.round(event.percent)} %`,
+            );
+            break;
+          case "generating":
+            setLabel(`${STEP_LABEL[event.step]} — ${event.tokens} jetons`);
             break;
           case "idle":
             setLabel(null);

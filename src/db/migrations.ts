@@ -234,4 +234,19 @@ export const MIGRATIONS: string[] = [
   UPDATE subthemes SET description = 'Tutoriels de travaux, bricolage et rénovation.'
     WHERE name = 'Travaux et bricolage' AND description IS NULL;
   `,
+
+  // 005 — icônes emoji.
+  //
+  // Le jeu d'icônes vectorielles n'avait ni animaux, ni tente, ni la moitié de
+  // ce que l'on range : le clavier emoji est déjà complet. Les thèmes d'origine
+  // basculent, à condition d'avoir gardé leur icône : une icône changée à la
+  // main ne correspond plus à la valeur testée, et reste donc intacte.
+  `
+  UPDATE themes SET icon = '🍽️' WHERE name = 'Recettes' AND icon = 'restaurant-outline';
+  UPDATE themes SET icon = '🗺️' WHERE name = 'Destinations roadtrip' AND icon = 'map-outline';
+  UPDATE themes SET icon = '🏍️' WHERE name = 'Moto' AND icon = 'bicycle-outline';
+  UPDATE themes SET icon = '🚐' WHERE name = 'Vanlife' AND icon = 'bus-outline';
+  UPDATE themes SET icon = '🚗' WHERE name = 'Voiture' AND icon = 'car-sport-outline';
+  UPDATE themes SET icon = '🏠' WHERE name = 'Maison' AND icon = 'home-outline';
+  `,
 ];

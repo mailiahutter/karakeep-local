@@ -91,3 +91,26 @@ test("le rattrapage ne touche que les consignes absentes", () => {
     assert.match(statement, /description IS NULL;$/);
   }
 });
+
+test("les icônes d'origine passent en emoji, un choix personnel est épargné", () => {
+  const db = new DatabaseSync(":memory:");
+  migrate(db, 4);
+  db.exec(`
+    INSERT INTO themes (id, name, icon, position) VALUES ('a', 'Vanlife', 'bus-outline', 0);
+    INSERT INTO themes (id, name, icon, position) VALUES ('b', 'Moto', 'flame-outline', 1);
+  `);
+  db.exec("BEGIN");
+  db.exec(MIGRATIONS[4]);
+  db.exec("COMMIT");
+
+  assert.equal(
+    db.prepare("SELECT icon FROM themes WHERE id = 'a'").get()?.icon,
+    "🚐",
+  );
+  // « Moto » ne porte plus l'icône d'origine : l'utilisateur l'a changée.
+  assert.equal(
+    db.prepare("SELECT icon FROM themes WHERE id = 'b'").get()?.icon,
+    "flame-outline",
+  );
+  db.close();
+});
