@@ -2,6 +2,10 @@
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
     "strict": true,
+    // Les modules pures s'importent entre eux avec l'extension explicite :
+    // c'est la seule forme que Node résout, et c'est ce qui permet de les
+    // tester sans empaqueteur. Metro accepte les deux écritures.
+    "allowImportingTsExtensions": true,
     "paths": {
       "@/*": ["./src/*"]
     }

@@ -46,6 +46,7 @@ export async function buildSnapshot(
     url: bookmark.url,
     title: bookmark.title,
     sourceKind: bookmark.sourceKind,
+    subject: bookmark.subject,
     theme,
     tags: bookmark.tags.map((t) => t.name),
     assets: assets.map(

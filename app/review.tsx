@@ -168,6 +168,11 @@ export default function ReviewScreen() {
         <Text style={[styles.proposal, { color: snapshot?.theme ? t.text : t.textFaint }]}>
           {snapshot?.theme ?? "Aucun thème proposé"}
         </Text>
+        <Text style={[styles.hint, { color: t.textFaint }]}>
+          {snapshot?.subject
+            ? `Le modèle a compris : « ${snapshot.subject} »`
+            : "Le modèle n'a rien compris du document."}
+        </Text>
       </Aspect>
 
       <Aspect

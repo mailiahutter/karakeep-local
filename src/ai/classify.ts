@@ -1,10 +1,15 @@
 /**
  * Classement d'un favori dans l'arborescence de thèmes.
  *
- * Demander à un modèle 3B d'inventer des tags donne des résultats inégaux ;
- * lui demander de choisir un numéro dans une liste fermée est une tâche d'un
- * tout autre ordre de difficulté. C'est aussi ce que l'utilisateur attend
- * réellement : retrouver « une idée d'aménagement de van », pas « un tag ».
+ * Le premier essai aplatissait toute l'arborescence en une liste unique — vingt
+ * et une entrées avec leurs descriptions — et demandait un numéro. Deux
+ * difficultés se cumulaient : tenir vingt et une définitions à la fois, et
+ * décider. Un modèle de trois milliards de paramètres n'y arrive pas de façon
+ * fiable, et c'est précisément le point qui compte le plus pour l'usage.
+ *
+ * On descend l'arbre à la place. D'abord le thème parmi six, puis le
+ * sous-thème parmi trois ou quatre. Deux questions faciles valent mieux
+ * qu'une question difficile, et le prompt de chacune tient en quelques lignes.
  *
  * Module pur : testable hors appareil.
  */
@@ -12,15 +17,8 @@
 export interface ClassifyOption {
   /** Numéro présenté au modèle, à partir de 1. */
   index: number;
-  themeId: string;
-  themeName: string;
-  subthemeId: string | null;
-  subthemeName: string | null;
-  /**
-   * Consigne de rangement, écrite par l'utilisateur. C'est elle qui lève
-   * l'ambiguïté d'un intitulé : « Moto › Ma sélection » ne dit pas si l'on
-   * range des motos à acheter ou des itinéraires.
-   */
+  id: string;
+  name: string;
   description: string | null;
 }
 
@@ -45,76 +43,65 @@ function trimDescription(raw: string | null | undefined): string | null {
     : `${text.slice(0, MAX_DESCRIPTION_CHARS - 1).trimEnd()}…`;
 }
 
+/** Premier niveau : les grands thèmes. */
+export function buildThemeOptions(themes: ThemeTree[]): ClassifyOption[] {
+  return themes.map((theme, i) => ({
+    index: i + 1,
+    id: theme.id,
+    name: theme.name,
+    description: trimDescription(theme.description),
+  }));
+}
+
 /**
- * Aplatit l'arborescence en choix numérotés.
+ * Second niveau : les sous-thèmes du thème retenu.
  *
- * Un thème sans sous-thème reste choisissable ; un thème qui en a n'est
- * proposé que par ses sous-thèmes, pour éviter que le modèle range tout à la
- * racine par facilité.
+ * Le thème hérite sa description aux sous-thèmes qui n'en ont pas : sans
+ * consigne, un intitulé comme « Ma sélection » ne dit rien.
  */
-export function buildOptions(themes: ThemeTree[]): ClassifyOption[] {
-  const options: ClassifyOption[] = [];
-  let index = 1;
-  for (const theme of themes) {
-    if (theme.subthemes.length === 0) {
-      options.push({
-        index: index++,
-        themeId: theme.id,
-        themeName: theme.name,
-        subthemeId: null,
-        subthemeName: null,
-        description: trimDescription(theme.description),
-      });
-      continue;
-    }
-    for (const sub of theme.subthemes) {
-      options.push({
-        index: index++,
-        themeId: theme.id,
-        themeName: theme.name,
-        subthemeId: sub.id,
-        subthemeName: sub.name,
-        // La consigne du sous-thème l'emporte : c'est la plus précise. Celle
-        // du thème sert de repli pour ses sous-thèmes non décrits.
-        description:
-          trimDescription(sub.description) ?? trimDescription(theme.description),
-      });
-    }
-  }
-  return options;
+export function buildSubthemeOptions(theme: ThemeTree): ClassifyOption[] {
+  return theme.subthemes.map((sub, i) => ({
+    index: i + 1,
+    id: sub.id,
+    name: sub.name,
+    description:
+      trimDescription(sub.description) ?? trimDescription(theme.description),
+  }));
 }
 
 export const CLASSIFY_SYSTEM_PROMPT =
-  "Tu es un assistant de classement. Tu réponds uniquement par un numéro, sans phrase, sans explication.";
+  "Tu es un assistant de classement. Tu réponds uniquement par un numéro, " +
+  "sans phrase, sans explication.";
 
-export function buildClassifyPrompt(
+/**
+ * Construit la question posée au modèle.
+ *
+ * `noneLabel` change de sens d'un niveau à l'autre : au premier, zéro veut
+ * dire « aucun thème ne convient » ; au second, « le thème est bon mais aucun
+ * sous-thème ne va ». C'est une issue nécessaire : forcer un choix produit un
+ * rangement faux, plus coûteux qu'une absence de rangement.
+ */
+export function buildChoicePrompt(
   options: ClassifyOption[],
-  title: string | null,
-  content: string,
-  maxContentChars = 3000,
+  document: string,
+  noneLabel: string,
 ): string {
   const list = options
-    .map((o) => {
-      const label = `${o.index}. ${o.themeName}${o.subthemeName ? ` › ${o.subthemeName}` : ""}`;
-      return o.description ? `${label} — ${o.description}` : label;
-    })
+    .map((o) => (o.description ? `${o.index}. ${o.name} — ${o.description}` : `${o.index}. ${o.name}`))
     .join("\n");
 
-  const doc = [title ? `Titre : ${title}` : "", content.slice(0, maxContentChars)]
-    .filter(Boolean)
-    .join("\n");
+  return `Voici la description d'un lien mis de côté.
 
-  return `Range le DOCUMENT dans une seule de ces catégories.
+<LIEN>
+${document}
+</LIEN>
+
+Dans laquelle de ces catégories le ranger ?
 
 ${list}
-0. Aucune de ces catégories
+0. ${noneLabel}
 
-<DOCUMENT>
-${doc}
-</DOCUMENT>
-
-Réponds par le seul numéro de la catégorie qui convient le mieux. Si aucune ne
-correspond vraiment, réponds 0. N'écris rien d'autre que le numéro.`;
+Réponds par le seul numéro. N'écris rien d'autre.`;
 }
 
 /**
@@ -132,13 +119,11 @@ export function parseChoice(raw: string, maxIndex: number): number | null {
   return n;
 }
 
-/** Traduit le numéro renvoyé en affectation, ou en absence d'affectation. */
+/** Traduit le numéro renvoyé en identifiant, ou en absence de choix. */
 export function resolveChoice(
   options: ClassifyOption[],
   choice: number | null,
-): { themeId: string; subthemeId: string | null } | null {
+): string | null {
   if (choice === null || choice === 0) return null;
-  const option = options.find((o) => o.index === choice);
-  if (!option) return null;
-  return { themeId: option.themeId, subthemeId: option.subthemeId };
+  return options.find((o) => o.index === choice)?.id ?? null;
 }

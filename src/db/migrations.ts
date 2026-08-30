@@ -278,4 +278,13 @@ export const MIGRATIONS: string[] = [
   CREATE UNIQUE INDEX idx_reviews_bookmark ON reviews(bookmark_id);
   CREATE INDEX idx_reviews_export ON reviews(exported_at, created_at);
   `,
+
+  // 007 — ce que le modèle a compris du document.
+  //
+  // Un mauvais rangement a deux causes possibles : le modèle n'a pas compris
+  // le sujet, ou il l'a compris et a mal choisi. Sans garder sa lecture, on ne
+  // peut pas les distinguer — et donc pas savoir quoi corriger.
+  `
+  ALTER TABLE bookmarks ADD COLUMN subject TEXT;
+  `,
 ];

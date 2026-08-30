@@ -31,6 +31,7 @@ export interface BookmarkRow {
   ai_status: AiStatus;
   ai_error: string | null;
   summary: string | null;
+  subject: string | null;
   source_kind: SourceKind;
   theme_id: string | null;
   subtheme_id: string | null;
@@ -65,6 +66,8 @@ export interface Bookmark {
   aiStatus: AiStatus;
   aiError: string | null;
   summary: string | null;
+  /** Ce que le modèle a compris du document, avant de le ranger. */
+  subject: string | null;
   sourceKind: SourceKind;
   themeId: string | null;
   subthemeId: string | null;
@@ -94,6 +97,7 @@ export function rowToBookmark(row: BookmarkRow, tags: Tag[] = []): Bookmark {
     aiStatus: row.ai_status,
     aiError: row.ai_error,
     summary: row.summary,
+    subject: row.subject,
     sourceKind: row.source_kind ?? "website",
     themeId: row.theme_id ?? null,
     subthemeId: row.subtheme_id ?? null,

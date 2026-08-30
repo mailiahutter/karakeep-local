@@ -16,8 +16,9 @@ import { radius, spacing, useTheme } from "./theme";
  */
 /** Ce que le modèle est en train de produire. */
 const STEP_LABEL = {
-  classify: "Rangement par thème",
-  tags: "Génération des tags",
+  digest: "Lecture du contenu",
+  theme: "Choix du thème",
+  subtheme: "Choix du sous-thème",
   summary: "Rédaction du résumé",
 } as const;
 

@@ -64,6 +64,13 @@ savoir avant de choisir :
   (« modèles de motos que j'envisage d'acheter »), elle vaut mieux qu'un
   intitulé court. Supprimer une catégorie ne supprime aucun lien : ceux qui y
   étaient redeviennent non rangés.
+- **Comment un lien est rangé** : en trois demandes courtes, pas en une seule
+  question difficile. D'abord « de quoi parle ce document ? » — le modèle
+  répond par une phrase et des mots-clés. Puis « quel thème ? » parmi les six,
+  à partir de cette phrase et non du texte brut de la page. Puis « quel
+  sous-thème ? » parmi les trois ou quatre du thème retenu. Chaque étape peut
+  échouer sans emporter les autres. Les mots-clés deviennent les tags : ils ne
+  servent qu'à ça, dire ce que le modèle a compris et l'aider à ranger.
 - **Choix du modèle** : c'est le processeur qui décide, pas la mémoire —
   llama.cpp tourne sur les cœurs, pas sur le GPU. Un téléphone peut loger un
   modèle de 7 milliards de paramètres sans pouvoir le faire répondre en un

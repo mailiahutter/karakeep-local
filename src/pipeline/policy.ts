@@ -86,14 +86,16 @@ export function lockIsHeld(
 /**
  * Temps accordé à chaque inférence.
  *
- * Le classement passe en premier et reçoit le budget le plus court : sa
- * réponse tient en un nombre, et c'est celle qui compte le plus pour
- * l'utilisateur. Le résumé, le plus coûteux, passe en dernier — s'il doit être
+ * Comprendre le sujet demande de lire la page ; choisir une catégorie ne
+ * demande que de lire une phrase. Les deux n'ont pas à recevoir le même
+ * budget. Le résumé, le plus coûteux, passe en dernier — s'il doit être
  * sacrifié, autant que ce soit lui.
  */
 export const AI_TIMEOUTS = {
-  classify: 90_000,
-  tags: 150_000,
+  /** « De quoi ça parle » : une phrase et des mots-clés à produire. */
+  digest: 120_000,
+  /** Un numéro dans une liste de six. Court par nature. */
+  choice: 60_000,
   summary: 180_000,
 } as const;
 

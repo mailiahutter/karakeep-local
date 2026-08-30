@@ -57,6 +57,7 @@ function rowToEntry(row: ReviewRow): ReviewEntry {
       url: "",
       title: null,
       sourceKind: "inconnu",
+      subject: null,
       theme: null,
       tags: [],
       assets: [],

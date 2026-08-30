@@ -21,6 +21,7 @@ const entry = (over: Partial<ReviewEntry> = {}): ReviewEntry => ({
     url: "https://atelier-napoleon.com/colliers",
     title: "Colliers en cuir pour Braque de Weimar",
     sourceKind: "website",
+    subject: "Colliers en cuir pour chien de chasse",
     theme: "Maison › Travaux et bricolage",
     tags: ["cuir", "chien"],
     assets: ["capture d'écran 1,5 Mo", "image 80 Ko"],

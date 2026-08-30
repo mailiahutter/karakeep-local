@@ -9,9 +9,8 @@ import {
   shouldSkipSummary,
   type WorkPhase,
 } from "./policy";
-import { generateTags } from "../ai/tagging";
 import { generateSummary } from "../ai/summary";
-import { classifyBookmark } from "../ai/classification";
+import { analyseBookmark } from "../ai/classification";
 import { assignTheme, isHumanClassified, listThemes } from "../db/themes";
 import { isModelInstalled } from "../ai/download";
 import { findModel } from "../ai/models";
@@ -22,6 +21,7 @@ import {
   resetInterruptedWork,
   setAiStatus,
   setFetchStatus,
+  setSubject,
   setSummary,
 } from "../db/bookmarks";
 import { attachTags } from "../db/tags";
@@ -51,8 +51,8 @@ export type QueueEvent =
   | { type: "bookmark-updated"; bookmarkId: string }
   | { type: "error"; bookmarkId: string; message: string };
 
-/** Les trois demandes faites au modèle pour un même favori. */
-export type AiStep = "classify" | "tags" | "summary";
+/** Les demandes faites au modèle pour un même favori. */
+export type AiStep = "digest" | "theme" | "subtheme" | "summary";
 
 type Listener = (event: QueueEvent) => void;
 
@@ -168,61 +168,65 @@ async function runTagStage(deadline: () => boolean): Promise<number> {
     const startedAt = Date.now();
     const onLoadProgress = (percent: number) =>
       emit({ type: "loading-model", percent });
-    const tokens = (step: AiStep) => (produced: number) =>
-      emit({ type: "generating", step, tokens: produced });
 
     try {
-      // Le rangement d'abord. C'est ce que l'utilisateur vient chercher, c'est
-      // la question la plus simple posée au modèle — un numéro dans une liste
-      // — et c'est donc ce qui doit aboutir même si la suite est abandonnée.
-      if (!(await isHumanClassified(bookmark.id))) {
-        const themes = await listThemes();
-        const placed = await classifyBookmark(
-          themes.map((t) => ({
-            id: t.id,
-            name: t.name,
-            // La consigne écrite par l'utilisateur suit jusqu'au prompt :
-            // sans elle, le modèle ne dispose que d'un intitulé ambigu.
-            description: t.description,
-            subthemes: t.subthemes.map((s) => ({
-              id: s.id,
-              name: s.name,
-              description: s.description,
-            })),
+      // Comprendre, puis ranger — trois demandes courtes au lieu d'une seule
+      // question à vingt et une options. Le rangement est ce que
+      // l'utilisateur vient chercher : il passe avant le résumé, qui ne
+      // s'exécute que s'il reste du temps.
+      const themes = await listThemes();
+      const analysis = await analyseBookmark(
+        themes.map((t) => ({
+          id: t.id,
+          name: t.name,
+          // La consigne écrite par l'utilisateur suit jusqu'au prompt : sans
+          // elle, le modèle ne dispose que d'un intitulé ambigu.
+          description: t.description,
+          subthemes: t.subthemes.map((s) => ({
+            id: s.id,
+            name: s.name,
+            description: s.description,
           })),
-          bookmark.title,
-          bookmark.content ?? "",
+        })),
+        {
+          title: bookmark.title,
+          description: bookmark.description,
+          content: bookmark.content,
+          url: bookmark.url,
+          language: settings.aiLanguage,
+          tagStyle: settings.tagStyle,
+        },
+        {
           modelPath,
-          {
-            timeoutMs: AI_TIMEOUTS.classify,
-            onToken: tokens("classify"),
-            onLoadProgress,
-          },
-        );
-        if (placed) {
-          await assignTheme(
-            bookmark.id,
-            placed.themeId,
-            placed.subthemeId,
-            "ai",
-          );
-          emit({ type: "bookmark-updated", bookmarkId: bookmark.id });
-        }
+          digestTimeoutMs: AI_TIMEOUTS.digest,
+          choiceTimeoutMs: AI_TIMEOUTS.choice,
+          onToken: (step, produced) =>
+            emit({ type: "generating", step, tokens: produced }),
+          onLoadProgress,
+        },
+      );
+
+      if (analysis.digest?.subject) {
+        await setSubject(bookmark.id, analysis.digest.subject);
       }
 
-      await beat();
-      const tags = await generateTags(bookmark, {
-        modelPath,
-        language: settings.aiLanguage,
-        tagStyle: settings.tagStyle,
-        timeoutMs: AI_TIMEOUTS.tags,
-        onToken: tokens("tags"),
-        onLoadProgress,
-      });
-      if (tags.length > 0) {
-        await attachTags(bookmark.id, tags, "ai");
-        emit({ type: "bookmark-updated", bookmarkId: bookmark.id });
+      // Les mots-clés de l'analyse deviennent les tags : ils disent ce que le
+      // modèle a compris du document, et c'est à cela seul que les tags
+      // servent ici — aider au rangement, puis se relire.
+      if (analysis.digest && analysis.digest.keywords.length > 0) {
+        await attachTags(bookmark.id, analysis.digest.keywords, "ai");
       }
+
+      // Un rangement corrigé à la main n'est jamais défait par le modèle.
+      if (analysis.themeId && !(await isHumanClassified(bookmark.id))) {
+        await assignTheme(
+          bookmark.id,
+          analysis.themeId,
+          analysis.subthemeId,
+          "ai",
+        );
+      }
+      emit({ type: "bookmark-updated", bookmarkId: bookmark.id });
 
       await beat();
       // Le résumé en dernier : c'est la réponse la plus longue à produire,
@@ -237,14 +241,15 @@ async function runTagStage(deadline: () => boolean): Promise<number> {
           modelPath,
           language: settings.aiLanguage,
           timeoutMs: AI_TIMEOUTS.summary,
-          onToken: tokens("summary"),
+          onToken: (n) =>
+            emit({ type: "generating", step: "summary", tokens: n }),
         });
         if (summary) await setSummary(bookmark.id, summary);
       }
 
       await setAiStatus(bookmark.id, "success");
     } catch (err) {
-      // Le classement et les tags déjà obtenus sont conservés : l'échec d'une
+      // Le rangement et les tags déjà obtenus sont conservés : l'échec d'une
       // étape ne doit pas effacer celles qui ont abouti.
       const message = `Analyse incomplète : ${(err as Error).message}`;
       await setAiStatus(bookmark.id, "error", message);

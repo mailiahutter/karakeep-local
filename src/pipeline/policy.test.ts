@@ -80,9 +80,9 @@ test("le résumé est abandonné quand le modèle traîne", () => {
   assert.equal(shouldSkipSummary(20_000), false);
 });
 
-test("le classement a le budget le plus court, le résumé le plus long", () => {
-  // Il répond par un nombre : s'il n'a rien produit en une minute et demie,
-  // ce n'est pas une question de longueur de réponse.
-  assert.ok(AI_TIMEOUTS.classify < AI_TIMEOUTS.tags);
-  assert.ok(AI_TIMEOUTS.tags < AI_TIMEOUTS.summary);
+test("lire la page coûte plus cher que choisir un numéro", () => {
+  // Comprendre le sujet demande de lire le document ; choisir une catégorie ne
+  // demande que de lire une phrase. Les deux n'ont pas le même budget.
+  assert.ok(AI_TIMEOUTS.choice < AI_TIMEOUTS.digest);
+  assert.ok(AI_TIMEOUTS.digest < AI_TIMEOUTS.summary);
 });

@@ -235,6 +235,15 @@ export async function setArchived(id: string, value: boolean): Promise<void> {
   );
 }
 
+/** Ce que le modèle a compris du document, gardé pour diagnostiquer un raté. */
+export async function setSubject(id: string, subject: string): Promise<void> {
+  const db = await getDb();
+  await db.runAsync("UPDATE bookmarks SET subject = ? WHERE id = ?", [
+    subject,
+    id,
+  ]);
+}
+
 export async function setSummary(id: string, summary: string): Promise<void> {
   const db = await getDb();
   await db.runAsync(

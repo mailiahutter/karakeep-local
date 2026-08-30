@@ -116,12 +116,13 @@ export const TAGS_JSON_SCHEMA = {
 } as const;
 
 /**
- * Isole un objet JSON dans une réponse potentiellement bavarde.
+ * Isole les fragments qui pourraient être du JSON dans une réponse
+ * potentiellement bavarde.
  *
  * Même avec une grammaire imposée, un petit modèle peut préfixer sa réponse ou
- * l'entourer d'un bloc de code : on ne veut pas perdre un tagging pour ça.
+ * l'entourer d'un bloc de code : on ne veut pas perdre une analyse pour ça.
  */
-export function parseTagsResponse(raw: string): string[] {
+export function jsonCandidates(raw: string): string[] {
   const candidates: string[] = [];
 
   const trimmed = raw.trim();
@@ -160,7 +161,11 @@ export function parseTagsResponse(raw: string): string[] {
     }
   }
 
-  for (const candidate of candidates) {
+  return candidates;
+}
+
+export function parseTagsResponse(raw: string): string[] {
+  for (const candidate of jsonCandidates(raw)) {
     try {
       const parsed: unknown = JSON.parse(candidate);
       const tags = extractTagArray(parsed);
@@ -169,7 +174,6 @@ export function parseTagsResponse(raw: string): string[] {
       // On essaie le candidat suivant.
     }
   }
-
   return [];
 }
 

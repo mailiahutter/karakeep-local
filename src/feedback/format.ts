@@ -15,6 +15,11 @@ export interface ReviewSnapshot {
   url: string;
   title: string | null;
   sourceKind: string;
+  /**
+   * Ce que le modèle a compris du document. C'est la pièce qui distingue un
+   * sujet mal lu d'un rangement mal choisi.
+   */
+  subject: string | null;
   theme: string | null;
   tags: string[];
   /** Une ligne par pièce conservée : « image 80 Ko ». */
@@ -124,6 +129,7 @@ export function buildFeedbackMarkdown(
     lines.push("");
     lines.push(`- Lien : ${s.url}`);
     lines.push(`- Type de source : ${s.sourceKind}`);
+    lines.push(`- Compris par le modèle : ${s.subject ?? "rien"}`);
     lines.push(`- Thème proposé : ${s.theme ?? "aucun"} → ${mark(entry.themeVerdict)}`);
     lines.push(
       `- Tags proposés : ${s.tags.length > 0 ? s.tags.join(", ") : "aucun"} → ${mark(entry.tagsVerdict)}`,
