@@ -9,7 +9,7 @@ import {
   shouldSkipSummary,
   type WorkPhase,
 } from "./policy";
-import { generateSummary } from "../ai/summary";
+import { MIN_CONTENT_FOR_SUMMARY, generateSummary } from "../ai/summary";
 import { analyseBookmark } from "../ai/classification";
 import { assignTheme, isHumanClassified, listThemes } from "../db/themes";
 import { isModelInstalled } from "../ai/download";
@@ -231,21 +231,29 @@ async function runTagStage(deadline: () => boolean): Promise<number> {
       await beat();
       // Le résumé en dernier : c'est la réponse la plus longue à produire,
       // donc la seule qu'on puisse sacrifier sans perdre l'essentiel.
+      const content = bookmark.content ?? "";
       const elapsed = Date.now() - startedAt;
-      if (
-        bookmark.content &&
-        bookmark.content.trim().length > 0 &&
-        !shouldSkipSummary(elapsed)
-      ) {
-        const summary = await generateSummary(bookmark.title, bookmark.content, {
+      const worthSummarising =
+        content.trim().length >= MIN_CONTENT_FOR_SUMMARY &&
+        !shouldSkipSummary(elapsed);
+
+      let summary: string | null = null;
+      if (worthSummarising) {
+        summary = await generateSummary(bookmark.title, content, {
           modelPath,
           language: settings.aiLanguage,
           timeoutMs: AI_TIMEOUTS.summary,
           onToken: (n) =>
             emit({ type: "generating", step: "summary", tokens: n }),
         });
-        if (summary) await setSummary(bookmark.id, summary);
       }
+      // Sur une publication courte, il n'y a rien à condenser — mais la phrase
+      // produite par l'étape de compréhension dit déjà de quoi il s'agit.
+      // Laisser la fiche sans résumé était un manque, pas une décision.
+      if (!summary && analysis.digest?.subject) {
+        summary = analysis.digest.subject;
+      }
+      if (summary) await setSummary(bookmark.id, summary);
 
       await setAiStatus(bookmark.id, "success");
     } catch (err) {

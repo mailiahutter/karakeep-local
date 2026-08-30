@@ -1,6 +1,10 @@
-import { adoptFile, downloadAsset, saveText } from "../db/assets";
+import {
+  adoptFile,
+  deleteAssetsFor,
+  downloadAsset,
+  saveText,
+} from "../db/assets";
 import { saveExtractedContent, setFetchStatus } from "../db/bookmarks";
-import { attachTags } from "../db/tags";
 import { detectSource, planFor, youtubeThumbnail } from "../archive/sources";
 import {
   captionWithoutHashtags,
@@ -8,6 +12,7 @@ import {
   instagramEmbedUrl,
   isStatsBoilerplate,
   looksLikeLoginWall,
+  usefulHashtags,
   mediaIdentity,
   pickCarousel,
 } from "../archive/instagram";
@@ -146,20 +151,36 @@ export async function captureBookmark(
   };
 
   // --- Hashtags de la légende ---------------------------------------
-  // Ce sont des mots-clés choisis par l'auteur : plus fiables que ce qu'un
-  // petit modèle déduirait d'une légende de deux lignes, et gratuits.
+  //
+  // Ils étaient enregistrés tels quels comme tags. Le résultat était
+  // inutilisable : vingt-neuf tags sur une publication, mêlant français,
+  // anglais et allemand, dont « photooftheday » et « summer ». Deux
+  // publications sur le même sujet ne partageaient alors aucun tag.
+  //
+  // Ce sont pourtant des mots choisis par l'auteur, donc un bon indice. On les
+  // garde comme tels — filtrés, plafonnés, joints au texte soumis au modèle —
+  // et c'est le modèle qui produit les tags, dans une seule langue.
   if (kind === "instagram" && content) {
-    const tags = hashtagsFrom(content);
-    if (tags.length > 0) {
-      await attachTags(bookmarkId, tags, "ai");
-      outcome.hashtags = tags.length;
-      // Le texte soumis au modèle se passe des hashtags, déjà exploités.
-      const stripped = captionWithoutHashtags(content);
-      if (stripped.length > 0) {
-        await saveExtractedContent(bookmarkId, { content: stripped });
-      }
+    const tags = usefulHashtags(hashtagsFrom(content));
+    outcome.hashtags = tags.length;
+    const caption = captionWithoutHashtags(content);
+    const rebuilt = [
+      caption,
+      tags.length > 0 ? `Mots-clés de l'auteur : ${tags.join(", ")}` : "",
+    ]
+      .filter((part) => part.length > 0)
+      .join("\n\n");
+    if (rebuilt.length > 0) {
+      await saveExtractedContent(bookmarkId, { content: rebuilt });
     }
   }
+
+  // Les pièces d'une capture précédente sont effacées maintenant, et pas
+  // avant : une nouvelle tentative qui échouerait ne doit pas laisser la fiche
+  // vide. Sans cela, chaque relance empilait un jeu de plus — d'où les
+  // « vidéo 57 Mo, vidéo 57 Mo » et les vieilles vignettes de 4 Ko qu'un
+  // filtre plus récent aurait écartées.
+  await deleteAssetsFor(bookmarkId);
 
   // --- Capture d'écran ---
   if (result.screenshotUri) {

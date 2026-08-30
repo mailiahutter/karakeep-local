@@ -15,7 +15,12 @@ import {
   type ModelDownload,
 } from "../../src/ai/download";
 import { releaseModel } from "../../src/ai/llm";
-import { MODELS, formatBytes, type ModelDescriptor } from "../../src/ai/models";
+import {
+  MODELS,
+  findModel,
+  formatBytes,
+  type ModelDescriptor,
+} from "../../src/ai/models";
 import { loadSettings, saveSetting } from "../../src/db/settings";
 import { Button, Card, ProgressBar, Row, SectionTitle } from "../../src/ui/components";
 import { radius, spacing, useTheme } from "../../src/ui/theme";
@@ -212,6 +217,24 @@ export default function ModelScreen() {
           </Text>
         </Row>
       </Card>
+
+      {findModel(selectedId)?.heavy && (
+        <Card style={{ borderColor: t.warning }}>
+          <Row>
+            <Ionicons name="warning-outline" size={19} color={t.warning} />
+            <Text style={[styles.notes, { color: t.warning, flex: 1 }]}>
+              Ce modèle est trop lourd pour un traitement fluide
+            </Text>
+          </Row>
+          <Text style={[styles.notes, { color: t.textMuted }]}>
+            Il occupe environ 5,5 Go de mémoire et tourne sur le processeur,
+            pas sur le GPU : comptez plusieurs minutes par lien, et Android
+            ferme souvent l'application dès qu'elle passe en arrière-plan —
+            l'analyse s'arrête alors sans message. Le modèle 3B ci-dessous
+            fait le même travail de rangement trois fois plus vite.
+          </Text>
+        </Card>
+      )}
 
       <SectionTitle>Modèles disponibles</SectionTitle>
 

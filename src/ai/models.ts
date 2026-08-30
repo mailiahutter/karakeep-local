@@ -25,6 +25,12 @@ export interface ModelDescriptor {
    * de paramètres sans pouvoir le faire répondre en un temps acceptable.
    */
   speedHint: string;
+  /**
+   * Modèle que l'appareil peut charger sans pouvoir le faire travailler.
+   * Android tue une application qui réclame cinq gigaoctets et demi dès
+   * qu'elle passe en arrière-plan : le traitement s'arrête sans message.
+   */
+  heavy?: boolean;
   url: string;
   /** Nom du fichier une fois enregistré sur l'appareil. */
   fileName: string;
@@ -38,6 +44,7 @@ export const MODELS: ModelDescriptor[] = [
     bytes: 4_683_074_240,
     ramHint: "12 Go et plus",
     speedHint: "environ 5 à 10 min par lien",
+    heavy: true,
     url: "https://huggingface.co/bartowski/Qwen2.5-7B-Instruct-GGUF/resolve/main/Qwen2.5-7B-Instruct-Q4_K_M.gguf",
     fileName: "Qwen2.5-7B-Instruct-Q4_K_M.gguf",
     notes:

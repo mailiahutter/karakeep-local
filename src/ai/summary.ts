@@ -7,6 +7,13 @@ import {
 } from "./prompt";
 
 /**
+ * Longueur en deçà de laquelle il n'y a rien à résumer. Une légende plus
+ * courte est déjà son propre résumé — et la phrase produite par l'étape de
+ * compréhension en tient lieu.
+ */
+export const MIN_CONTENT_FOR_SUMMARY = 220;
+
+/**
  * Résumé d'un contenu par le modèle embarqué.
  *
  * La construction du prompt et le nettoyage de la réponse vivent dans
@@ -21,8 +28,10 @@ export async function generateSummary(
     onToken?: (produced: number) => void;
   },
 ): Promise<string | null> {
-  // Sous ce seuil, un résumé serait plus long que la source.
-  if (content.trim().length < 400) return null;
+  // Sous ce seuil, un résumé serait plus long que la source. Le seuil était à
+  // 400 : sur Instagram, presque aucune légende ne l'atteint, et toutes les
+  // fiches se retrouvaient sans résumé.
+  if (content.trim().length < MIN_CONTENT_FOR_SUMMARY) return null;
 
   const raw = await complete(opts.modelPath, {
     system: SUMMARY_SYSTEM_PROMPT,

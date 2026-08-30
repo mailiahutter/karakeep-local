@@ -87,7 +87,10 @@ Réponds par un objet JSON :
   il est question — l'animal, le véhicule, le plat, la pièce de la maison,
   l'outil, le lieu. Pas « un article de blog », pas « une page de boutique » :
   ce dont l'article parle.
-- "motscles" : de trois à six mots ou expressions courtes tirés du document.
+- "motscles" : de trois à six mots ou expressions courtes, **en ${language}**.
+  Traduis ceux qui apparaissent dans une autre langue dans le document : deux
+  liens sur le même sujet doivent porter les mêmes mots. Garde tels quels les
+  noms propres — marques, modèles, lieux.
   ${tagStyleInstruction(tagStyle)}
 
 N'écris rien d'autre que l'objet JSON.`;

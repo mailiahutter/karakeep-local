@@ -93,3 +93,21 @@ test("sans rien du tout, le titre suffit encore", () => {
   const doc = describeForClassification("Yamaha Ténéré 700", null, "");
   assert.equal(doc, "Titre : Yamaha Ténéré 700");
 });
+
+test("les mots-clés sont demandés dans une seule langue", () => {
+  // Constaté : une publication donnait « brustgeschirr, dogharness, harnais »
+  // — trois langues pour une même chose, donc aucun regroupement possible.
+  const p = buildDigestPrompt({ ...INPUT, language: "français" });
+  assert.ok(p.includes("**en français**"));
+  assert.ok(p.includes("Traduis ceux qui apparaissent dans une autre langue"));
+  // Les noms propres ne se traduisent pas : « williamwalker » reste utile.
+  assert.ok(p.includes("noms propres"));
+});
+
+test("les mots-clés de l'auteur arrivent jusqu'au modèle", () => {
+  const p = buildDigestPrompt({
+    ...INPUT,
+    content: "Nouveau harnais.\n\nMots-clés de l'auteur : harness, williamwalker",
+  });
+  assert.ok(p.includes("Mots-clés de l'auteur : harness, williamwalker"));
+});

@@ -1,9 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Alert,
   Image,
+  KeyboardAvoidingView,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -12,6 +13,7 @@ import {
   View,
 } from "react-native";
 
+import { listAssets, type Asset } from "../src/db/assets";
 import { getBookmark } from "../src/db/bookmarks";
 import {
   NO_VERDICT,
@@ -23,6 +25,7 @@ import type { Bookmark } from "../src/db/types";
 import { hostLabel } from "../src/db/urls";
 import { buildSnapshot } from "../src/feedback/collect";
 import type { ReviewSnapshot, Verdict } from "../src/feedback/format";
+import { AssetViewer } from "../src/ui/AssetViewer";
 import { Button, Card, Chip, Row } from "../src/ui/components";
 import { notifyBookmarksChanged } from "../src/ui/events";
 import { radius, spacing, useTheme } from "../src/ui/theme";
@@ -55,6 +58,9 @@ export default function ReviewScreen() {
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [assets, setAssets] = useState<Asset[]>([]);
+  const [viewing, setViewing] = useState<number | null>(null);
+  const scroller = useRef<ScrollView>(null);
 
   useEffect(() => {
     void (async () => {
@@ -69,11 +75,13 @@ export default function ReviewScreen() {
     if (!current) {
       setBookmark(null);
       setSnapshot(null);
+      setAssets([]);
       return;
     }
     void (async () => {
       setBookmark(await getBookmark(current));
       setSnapshot(await buildSnapshot(current));
+      setAssets(await listAssets(current));
       setVerdicts(NO_VERDICT);
       setComment("");
     })();
@@ -105,6 +113,10 @@ export default function ReviewScreen() {
     [advance, comment, current, snapshot, verdicts],
   );
 
+  // Archive et capture d'écran ne sont pas des illustrations : ce qui se juge
+  // ici, ce sont les images et vidéos retenues du contenu lui-même.
+  const visual = assets.filter((a) => a.kind === "image" || a.kind === "video");
+
   if (loading) return <View style={{ flex: 1, backgroundColor: t.bg }} />;
 
   if (!current || !bookmark) {
@@ -132,7 +144,9 @@ export default function ReviewScreen() {
   }
 
   return (
-    <ScrollView
+    <KeyboardAvoidingView behavior="padding" style={styles.fill}>
+      <ScrollView
+      ref={scroller}
       style={{ backgroundColor: t.bg }}
       contentContainerStyle={styles.content}
       keyboardShouldPersistTaps="handled"
@@ -158,6 +172,13 @@ export default function ReviewScreen() {
             </Text>
           </View>
         </Row>
+        {/* « Instagram » comme titre ne dit rien du contenu : c'est l'extrait
+            qui permet de juger le rangement. */}
+        {(bookmark.description ?? bookmark.content) && (
+          <Text style={[styles.excerpt, { color: t.textMuted }]} numberOfLines={6}>
+            {bookmark.description ?? bookmark.content}
+          </Text>
+        )}
       </Card>
 
       <Aspect
@@ -198,19 +219,43 @@ export default function ReviewScreen() {
         value={verdicts.media}
         onChange={(v) => setVerdicts((s) => ({ ...s, media: v }))}
       >
-        <Text
-          style={[
-            styles.proposal,
-            { color: snapshot && snapshot.assets.length > 0 ? t.text : t.textFaint },
-          ]}
-        >
-          {snapshot && snapshot.assets.length > 0
-            ? snapshot.assets.join(" · ")
-            : "Rien de conservé"}
-        </Text>
-        <Text style={[styles.hint, { color: t.textFaint }]}>
-          Ouvre la fiche pour les voir en grand si tu hésites.
-        </Text>
+        {visual.length > 0 ? (
+          <>
+            {/* Une liste de tailles de fichiers ne permet pas de juger une
+                image. Il faut la voir, et pouvoir l'ouvrir en grand. */}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              <Row>
+                {visual.map((asset) => (
+                  <Pressable
+                    key={asset.id}
+                    onPress={() =>
+                      setViewing(assets.findIndex((a) => a.id === asset.id))
+                    }
+                    accessibilityRole="imagebutton"
+                    accessibilityLabel={`Ouvrir ${asset.kind}`}
+                  >
+                    <Image
+                      source={{ uri: asset.path }}
+                      style={[styles.media, { backgroundColor: t.surfaceAlt }]}
+                    />
+                    {asset.kind === "video" && (
+                      <View style={styles.playBadge}>
+                        <Ionicons name="play" size={16} color="#fff" />
+                      </View>
+                    )}
+                  </Pressable>
+                ))}
+              </Row>
+            </ScrollView>
+            <Text style={[styles.hint, { color: t.textFaint }]}>
+              Touche une vignette pour l'ouvrir en grand.
+            </Text>
+          </>
+        ) : (
+          <Text style={[styles.proposal, { color: t.textFaint }]}>
+            Aucune image ni vidéo conservée
+          </Text>
+        )}
       </Aspect>
 
       <Aspect
@@ -235,6 +280,11 @@ export default function ReviewScreen() {
         <TextInput
           value={comment}
           onChangeText={setComment}
+          // Le champ était masqué par le clavier, ce qui rendait la saisie
+          // impossible à relire — donc le retour lui-même impossible à écrire.
+          onFocus={() =>
+            setTimeout(() => scroller.current?.scrollToEnd({ animated: true }), 150)
+          }
           placeholder="Ça parle de chiens, pas de bricolage. Le thème Maison ne convient pas."
           placeholderTextColor={t.textFaint}
           multiline
@@ -268,7 +318,16 @@ export default function ReviewScreen() {
         variant="secondary"
         onPress={() => router.push(`/bookmark/${bookmark.id}`)}
       />
-    </ScrollView>
+      </ScrollView>
+
+      {viewing !== null && (
+        <AssetViewer
+          assets={assets}
+          startIndex={viewing}
+          onClose={() => setViewing(null)}
+        />
+      )}
+    </KeyboardAvoidingView>
   );
 }
 
@@ -353,7 +412,8 @@ function VerdictButton({
 }
 
 const styles = StyleSheet.create({
-  content: { padding: spacing.lg, gap: spacing.md, paddingBottom: spacing.xxl },
+  fill: { flex: 1 },
+  content: { padding: spacing.lg, gap: spacing.md, paddingBottom: spacing.xxl * 2 },
   progress: { fontSize: 12.5, fontWeight: "700", textAlign: "center" },
   grow: { flex: 1 },
   thumb: { width: 64, height: 64, borderRadius: radius.md },
@@ -362,6 +422,19 @@ const styles = StyleSheet.create({
   aspectLabel: { fontSize: 12, fontWeight: "700", letterSpacing: 0.3 },
   proposal: { fontSize: 14.5, lineHeight: 20 },
   hint: { fontSize: 12, lineHeight: 16 },
+  excerpt: { fontSize: 13.5, lineHeight: 19, marginTop: spacing.sm },
+  media: { width: 96, height: 96, borderRadius: radius.md },
+  playBadge: {
+    position: "absolute",
+    right: 6,
+    bottom: 6,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#000A",
+  },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
   verdicts: { marginTop: spacing.sm },
   verdict: {

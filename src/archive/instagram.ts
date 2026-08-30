@@ -142,3 +142,43 @@ export function pickCarousel(
   }
   return [...best.values()].slice(0, max);
 }
+
+/**
+ * Hashtags de remplissage, qui ne disent rien du sujet.
+ *
+ * Une publication en porte facilement trente ; « photooftheday », « summer »
+ * ou « 2023 » ne renseignent ni le classement ni la relecture. Ce ne sont pas
+ * des tags, c'est de la portée. On les écarte avant de soumettre le reste au
+ * modèle comme indice.
+ */
+const FILLER_HASHTAGS = new Set([
+  "photooftheday", "picoftheday", "instagood", "instadaily", "instalike",
+  "instapic", "instagram", "insta", "reels", "reel", "reelsinstagram",
+  "explore", "explorepage", "foryou", "foryoupage", "fyp", "viral", "trending",
+  "follow", "followme", "followforfollow", "like4like", "likeforlike", "l4l",
+  "f4f", "love", "happy", "beautiful", "photo", "photography", "photographer",
+  "pic", "picture", "shot", "art", "style", "aesthetic", "aesthetics",
+  "lifestyle", "life", "mood", "vibes", "goals", "inspo", "inspiration",
+  "details", "essentials", "daily", "today", "new", "best", "top", "cool",
+  "amazing", "awesome", "nice", "good", "wow", "yes", "ootd", "tbt",
+  "summer", "winter", "spring", "autumn", "fall", "weekend", "monday",
+  "friday", "sunday", "smallbusiness", "handmade", "madeingermany",
+]);
+
+/** L'année seule ne dit rien non plus. */
+function isFiller(tag: string): boolean {
+  const key = tag.toLowerCase();
+  if (FILLER_HASHTAGS.has(key)) return true;
+  if (/^(19|20)\d{2}$/.test(key)) return true;
+  return key.length < 3;
+}
+
+/**
+ * Hashtags qui valent d'être montrés au modèle, les plus informatifs d'abord.
+ *
+ * Le plafond est là pour une raison observée : une publication portait
+ * vingt-neuf hashtags, qui noyaient à eux seuls la légende dans le prompt.
+ */
+export function usefulHashtags(tags: string[], max = 12): string[] {
+  return tags.filter((t) => !isFiller(t)).slice(0, max);
+}
