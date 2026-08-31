@@ -43,6 +43,18 @@ function StatusHint({ bookmark }: { bookmark: Bookmark }) {
       </View>
     );
   }
+  if (bookmark.aiStatus === "error") {
+    // Sans cette branche, un lien dont l'analyse a échoué était indiscernable
+    // d'un lien correctement traité : la carte restait simplement vide.
+    return (
+      <View style={styles.status}>
+        <Ionicons name="alert-circle-outline" size={13} color={t.warning} />
+        <Text style={[styles.statusText, { color: t.warning }]} numberOfLines={1}>
+          Analyse interrompue — touche pour relancer
+        </Text>
+      </View>
+    );
+  }
   if (bookmark.aiStatus === "running" || bookmark.aiStatus === "pending") {
     return (
       <View style={styles.status}>
@@ -69,6 +81,7 @@ export function BookmarkCard({
 }) {
   const t = useTheme();
   const host = hostLabel(bookmark.url);
+  const thumb = bookmark.thumbnailPath ?? bookmark.imageUrl;
 
   return (
     <Pressable
@@ -91,9 +104,12 @@ export function BookmarkCard({
             {host ?? bookmark.url} · {relativeDate(bookmark.createdAt)}
           </Text>
         </View>
-        {bookmark.imageUrl && (
+        {/* La pièce conservée passe avant l'adresse du site : celles
+            d'Instagram expirent en quelques jours, et la liste montrait des
+            cases grises pour des images pourtant présentes sur l'appareil. */}
+        {thumb && (
           <Image
-            source={{ uri: bookmark.imageUrl }}
+            source={{ uri: thumb }}
             style={[styles.thumb, { backgroundColor: t.surfaceAlt }]}
             resizeMode="cover"
           />

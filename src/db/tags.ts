@@ -71,6 +71,29 @@ export async function attachTags(
   });
 }
 
+/**
+ * Remplace les tags proposés par le modèle, sans toucher à ceux posés à la
+ * main.
+ *
+ * `attachTags` ajoute seulement. Une nouvelle analyse empilait donc ses tags
+ * sur les précédents : une publication en portait vingt-neuf, en trois
+ * langues, dont la plupart venaient d'une version antérieure de
+ * l'application. Ce que le modèle propose aujourd'hui doit remplacer ce qu'il
+ * proposait hier.
+ */
+export async function replaceAiTags(
+  bookmarkId: string,
+  names: string[],
+): Promise<void> {
+  const db = await getDb();
+  await db.runAsync(
+    "DELETE FROM bookmark_tags WHERE bookmark_id = ? AND source = 'ai'",
+    [bookmarkId],
+  );
+  await attachTags(bookmarkId, names, "ai");
+  await pruneOrphanTags();
+}
+
 export async function detachTag(
   bookmarkId: string,
   tagId: string,

@@ -68,6 +68,12 @@ export interface Bookmark {
   summary: string | null;
   /** Ce que le modèle a compris du document, avant de le ranger. */
   subject: string | null;
+  /**
+   * Vignette conservée sur l'appareil. `imageUrl` pointe vers le site, dont
+   * les adresses expirent — celles d'Instagram en quelques jours : la liste
+   * affichait alors des cases grises pour des images pourtant téléchargées.
+   */
+  thumbnailPath: string | null;
   sourceKind: SourceKind;
   themeId: string | null;
   subthemeId: string | null;
@@ -75,7 +81,11 @@ export interface Bookmark {
   tags: Tag[];
 }
 
-export function rowToBookmark(row: BookmarkRow, tags: Tag[] = []): Bookmark {
+export function rowToBookmark(
+  row: BookmarkRow,
+  tags: Tag[] = [],
+  thumbnailPath: string | null = null,
+): Bookmark {
   return {
     id: row.id,
     url: row.url,
@@ -98,6 +108,7 @@ export function rowToBookmark(row: BookmarkRow, tags: Tag[] = []): Bookmark {
     aiError: row.ai_error,
     summary: row.summary,
     subject: row.subject,
+    thumbnailPath,
     sourceKind: row.source_kind ?? "website",
     themeId: row.theme_id ?? null,
     subthemeId: row.subtheme_id ?? null,

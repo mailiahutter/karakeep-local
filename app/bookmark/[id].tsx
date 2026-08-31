@@ -123,9 +123,9 @@ export default function BookmarkScreen() {
       style={{ backgroundColor: t.bg }}
       contentContainerStyle={styles.content}
     >
-      {bookmark.imageUrl && (
+      {(bookmark.thumbnailPath ?? bookmark.imageUrl) && (
         <Image
-          source={{ uri: bookmark.imageUrl }}
+          source={{ uri: bookmark.thumbnailPath ?? bookmark.imageUrl! }}
           style={[styles.hero, { backgroundColor: t.surfaceAlt }]}
           resizeMode="cover"
         />

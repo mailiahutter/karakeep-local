@@ -39,9 +39,40 @@ async function tagsFor(ids: string[]): Promise<Map<string, Tag[]>> {
   return out;
 }
 
+/**
+ * Vignette locale de chaque favori : une image conservée de préférence, à
+ * défaut la capture d'écran de la page.
+ */
+async function thumbnailsFor(ids: string[]): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  if (ids.length === 0) return out;
+  const db = await getDb();
+  const placeholders = ids.map(() => "?").join(",");
+  const rows = await db.getAllAsync<{ bookmark_id: string; path: string }>(
+    `SELECT bookmark_id, path FROM assets
+     WHERE bookmark_id IN (${placeholders})
+       AND kind IN ('image', 'screenshot')
+     ORDER BY bookmark_id,
+              CASE kind WHEN 'image' THEN 0 ELSE 1 END,
+              created_at`,
+    ids,
+  );
+  // La requête est triée : la première ligne rencontrée est la bonne.
+  for (const row of rows) {
+    if (!out.has(row.bookmark_id)) out.set(row.bookmark_id, row.path);
+  }
+  return out;
+}
+
 async function hydrate(rows: BookmarkRow[]): Promise<Bookmark[]> {
-  const tagMap = await tagsFor(rows.map((r) => r.id));
-  return rows.map((r) => rowToBookmark(r, tagMap.get(r.id) ?? []));
+  const ids = rows.map((r) => r.id);
+  const [tagMap, thumbs] = await Promise.all([
+    tagsFor(ids),
+    thumbnailsFor(ids),
+  ]);
+  return rows.map((r) =>
+    rowToBookmark(r, tagMap.get(r.id) ?? [], thumbs.get(r.id) ?? null),
+  );
 }
 
 export interface CreateResult {

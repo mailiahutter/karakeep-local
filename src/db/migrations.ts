@@ -287,4 +287,21 @@ export const MIGRATIONS: string[] = [
   `
   ALTER TABLE bookmarks ADD COLUMN subject TEXT;
   `,
+
+  // 008 — remise en file après le changement d'analyse.
+  //
+  // Les tags ne sont plus les hashtags bruts de la publication mais les
+  // mots-clés du modèle, dans une seule langue ; le rangement descend
+  // l'arborescence au lieu de choisir dans une liste à plat. Les fiches
+  // analysées par les versions précédentes portent donc des propositions qui
+  // n'ont plus le même sens — jusqu'à vingt-neuf tags en trois langues.
+  //
+  // Elles repassent une fois au modèle. Ce que l'utilisateur a rangé lui-même
+  // est épargné : `theme_source = 'human'` n'est jamais défait.
+  `
+  UPDATE bookmarks SET ai_status = 'pending'
+   WHERE archived = 0
+     AND ai_status IN ('success', 'error')
+     AND (theme_source IS NULL OR theme_source <> 'human');
+  `,
 ];

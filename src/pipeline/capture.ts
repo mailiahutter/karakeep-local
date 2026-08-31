@@ -285,7 +285,29 @@ export async function captureBookmark(
     }
   }
 
-  await setFetchStatus(bookmarkId, blocked ? "error" : "success",
-    blocked ? notes[0] : undefined);
+  // Une capture qui ne rapporte ni texte ni média n'est pas une réussite.
+  // Elle produisait pourtant une fiche d'apparence normale — un titre
+  // « Instagram » et rien d'autre — qu'on ne pouvait distinguer d'une
+  // publication réellement vide, ni relancer.
+  const empty =
+    !description &&
+    content.trim().length === 0 &&
+    outcome.images === 0 &&
+    outcome.videos === 0;
+
+  if (blocked) {
+    await setFetchStatus(bookmarkId, "error", notes[0]);
+  } else if (empty) {
+    const reason =
+      kind === "instagram"
+        ? "Rien n'a pu être récupéré de cette publication. Si elle existe " +
+          "toujours, connecte-toi depuis Réglages → Compte Instagram, puis relance."
+        : "Rien n'a pu être récupéré de cette page. Relance la capture, ou " +
+          "ouvre-la pour vérifier qu'elle est toujours en ligne.";
+    notes.push(reason);
+    await setFetchStatus(bookmarkId, "error", reason);
+  } else {
+    await setFetchStatus(bookmarkId, "success");
+  }
   return outcome;
 }

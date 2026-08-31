@@ -24,7 +24,7 @@ import {
   setSubject,
   setSummary,
 } from "../db/bookmarks";
-import { attachTags } from "../db/tags";
+import { replaceAiTags } from "../db/tags";
 import { loadSettings } from "../db/settings";
 
 /**
@@ -214,7 +214,7 @@ async function runTagStage(deadline: () => boolean): Promise<number> {
       // modèle a compris du document, et c'est à cela seul que les tags
       // servent ici — aider au rangement, puis se relire.
       if (analysis.digest && analysis.digest.keywords.length > 0) {
-        await attachTags(bookmark.id, analysis.digest.keywords, "ai");
+        await replaceAiTags(bookmark.id, analysis.digest.keywords);
       }
 
       // Un rangement corrigé à la main n'est jamais défait par le modèle.

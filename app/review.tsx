@@ -157,9 +157,9 @@ export default function ReviewScreen() {
 
       <Card>
         <Row>
-          {bookmark.imageUrl && (
+          {(bookmark.thumbnailPath ?? bookmark.imageUrl) && (
             <Image
-              source={{ uri: bookmark.imageUrl }}
+              source={{ uri: bookmark.thumbnailPath ?? bookmark.imageUrl! }}
               style={[styles.thumb, { backgroundColor: t.surfaceAlt }]}
             />
           )}

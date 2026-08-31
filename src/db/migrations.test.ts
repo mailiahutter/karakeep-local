@@ -114,3 +114,42 @@ test("les icônes d'origine passent en emoji, un choix personnel est épargné",
   );
   db.close();
 });
+
+test("le changement d'analyse remet les fiches en file, sauf celles rangées à la main", () => {
+  const db = new DatabaseSync(":memory:");
+  for (let i = 0; i < MIGRATIONS.length - 1; i++) {
+    db.exec("BEGIN");
+    db.exec(MIGRATIONS[i]);
+    db.exec("COMMIT");
+  }
+  const add = (id: string, ai: string, source: string | null, archived = 0) =>
+    db
+      .prepare(
+        `INSERT INTO bookmarks (id, url, created_at, updated_at, archived,
+                                fetch_status, ai_status, theme_source)
+         VALUES (?, ?, 1, 1, ?, 'success', ?, ?)`,
+      )
+      .run(id, `https://x.fr/${id}`, archived, ai, source);
+
+  add("auto", "success", "ai");
+  add("jamais", "success", null);
+  add("humain", "success", "human");
+  add("archive", "success", "ai", 1);
+  add("encours", "pending", null);
+
+  db.exec("BEGIN");
+  db.exec(MIGRATIONS[MIGRATIONS.length - 1]);
+  db.exec("COMMIT");
+
+  const status = (id: string) =>
+    db.prepare("SELECT ai_status FROM bookmarks WHERE id = ?").get(id)
+      ?.ai_status;
+
+  assert.equal(status("auto"), "pending");
+  assert.equal(status("jamais"), "pending");
+  // Un rangement fait à la main n'est jamais défait par le modèle.
+  assert.equal(status("humain"), "success");
+  // Les archives ne valent pas de recalcul.
+  assert.equal(status("archive"), "success");
+  db.close();
+});
