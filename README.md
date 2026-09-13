@@ -49,13 +49,16 @@ savoir avant de choisir :
   le bouton `+`. L'écriture est immédiate ; l'extraction et le tagging suivent
   en arrière-plan.
 - **Traitement d'arrière-plan** : la file repart au lancement, à chaque retour
-  au premier plan, et — application fermée — sur un réveil confié à WorkManager.
-  Le système choisit le moment à partir d'un intervalle minimal de 15 minutes :
-  un lien partagé puis l'application aussitôt refermée est traité dans le
-  quart d'heure qui suit, pas à la seconde. Le bandeau d'accueil dit ce qui est
-  en cours et ce qui attend, avec un bouton pour relancer tout de suite.
-  L'extraction, elle, a besoin de la WebView : elle ne tourne que dans
-  l'application ouverte.
+  au premier plan, et — application fermée — sur un réveil confié à WorkManager,
+  au minimum toutes les quinze minutes. Ces réveils font **tout** le travail :
+  la page est alors lue sans moteur de rendu (le HTML servi, sans exécuter son
+  JavaScript), ce qui donne le titre, le texte, les métadonnées et les médias —
+  de quoi ranger. Il y manque la capture d'écran et l'archive autonome, qui
+  demandent une WebView : ces fiches sont marquées et complétées à la
+  prochaine ouverture de l'application.
+  Réglages → « Travail en arrière-plan » journalise chaque réveil : c'est le
+  seul moyen de distinguer « Android ne réveille pas » — presque toujours son
+  gestionnaire de batterie — de « le réveil a lieu et ne trouve rien ».
 - **Thèmes et sous-thèmes** modifiables : Réglages → « Thèmes et sous-thèmes »,
   ou le bouton « Gérer les thèmes » de l'onglet Thèmes. Chaque catégorie porte
   une **description**, et c'est elle que le modèle lit pour ranger un lien —

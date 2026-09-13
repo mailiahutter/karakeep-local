@@ -59,6 +59,10 @@ export default function RootLayout() {
             options={{ title: "Retours sur l'IA" }}
           />
           <Stack.Screen
+            name="settings/background"
+            options={{ title: "Travail en arrière-plan" }}
+          />
+          <Stack.Screen
             name="review"
             options={{ title: "Relecture", presentation: "modal" }}
           />

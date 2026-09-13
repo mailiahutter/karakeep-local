@@ -304,4 +304,15 @@ export const MIGRATIONS: string[] = [
      AND ai_status IN ('success', 'error')
      AND (theme_source IS NULL OR theme_source <> 'human');
   `,
+
+  // 009 — mode de capture.
+  //
+  // Hors interface, la page est lue sans moteur de rendu : ni capture d'écran
+  // ni archive autonome. La fiche reste exploitable — c'est tout l'intérêt —
+  // mais incomplète. On le note pour la compléter à la prochaine ouverture,
+  // plutôt que de la laisser diminuée pour toujours.
+  `
+  ALTER TABLE bookmarks ADD COLUMN capture_mode TEXT;
+  CREATE INDEX idx_bookmarks_capture_mode ON bookmarks(capture_mode);
+  `,
 ];

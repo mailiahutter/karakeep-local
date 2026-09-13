@@ -391,3 +391,21 @@ export async function requeueAutoClassified(): Promise<number> {
   );
   return result.changes;
 }
+
+/**
+ * Favoris lus sans moteur de rendu, qu'une session avec interface peut
+ * compléter — capture d'écran et archive autonome leur manquent.
+ */
+export async function lightlyCaptured(limit = 3): Promise<Bookmark[]> {
+  const db = await getDb();
+  const rows = await db.getAllAsync<BookmarkRow>(
+    `SELECT * FROM bookmarks
+     WHERE capture_mode = 'light'
+       AND fetch_status = 'success'
+       AND archived = 0
+     ORDER BY created_at DESC
+     LIMIT ?`,
+    [limit],
+  );
+  return hydrate(rows);
+}

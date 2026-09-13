@@ -33,6 +33,7 @@ export interface BookmarkRow {
   summary: string | null;
   subject: string | null;
   source_kind: SourceKind;
+  capture_mode: "light" | "full" | null;
   theme_id: string | null;
   subtheme_id: string | null;
   theme_source: "ai" | "human" | null;
@@ -68,6 +69,11 @@ export interface Bookmark {
   summary: string | null;
   /** Ce que le modèle a compris du document, avant de le ranger. */
   subject: string | null;
+  /**
+   * `light` : page lue sans moteur de rendu, faute d'interface montée. Il
+   * manque la capture d'écran et l'archive autonome, à compléter plus tard.
+   */
+  captureMode: "light" | "full" | null;
   /**
    * Vignette conservée sur l'appareil. `imageUrl` pointe vers le site, dont
    * les adresses expirent — celles d'Instagram en quelques jours : la liste
@@ -108,6 +114,7 @@ export function rowToBookmark(
     aiError: row.ai_error,
     summary: row.summary,
     subject: row.subject,
+    captureMode: row.capture_mode,
     thumbnailPath,
     sourceKind: row.source_kind ?? "website",
     themeId: row.theme_id ?? null,

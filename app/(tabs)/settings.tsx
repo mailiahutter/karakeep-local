@@ -109,6 +109,13 @@ export default function SettingsScreen() {
           />
 
           <NavRow
+            icon="sync-outline"
+            label="Travail en arrière-plan"
+            hint="Vérifie qu'Android réveille bien l'application pour traiter les liens."
+            onPress={() => router.push("/settings/background")}
+          />
+
+          <NavRow
             icon="albums-outline"
             label="Thèmes et sous-thèmes"
             hint="Les tiroirs où le modèle range les liens, et la consigne qu'il lit pour décider."

@@ -116,12 +116,9 @@ test("les icônes d'origine passent en emoji, un choix personnel est épargné",
 });
 
 test("le changement d'analyse remet les fiches en file, sauf celles rangées à la main", () => {
+  const REQUEUE = 7; // 008 — remise en file après le changement d'analyse.
   const db = new DatabaseSync(":memory:");
-  for (let i = 0; i < MIGRATIONS.length - 1; i++) {
-    db.exec("BEGIN");
-    db.exec(MIGRATIONS[i]);
-    db.exec("COMMIT");
-  }
+  migrate(db, REQUEUE);
   const add = (id: string, ai: string, source: string | null, archived = 0) =>
     db
       .prepare(
@@ -138,7 +135,7 @@ test("le changement d'analyse remet les fiches en file, sauf celles rangées à 
   add("encours", "pending", null);
 
   db.exec("BEGIN");
-  db.exec(MIGRATIONS[MIGRATIONS.length - 1]);
+  db.exec(MIGRATIONS[REQUEUE]);
   db.exec("COMMIT");
 
   const status = (id: string) =>

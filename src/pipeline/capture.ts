@@ -17,6 +17,7 @@ import {
   pickCarousel,
 } from "../archive/instagram";
 import { pickImages } from "../archive/images";
+import { fetchPage } from "../archive/fetchPage";
 import { enqueue, isWorkerReady } from "../archive/queue";
 import type { ArchiveResult, CapturedImage } from "../archive/types";
 import { getDb } from "../db/client";
@@ -46,6 +47,14 @@ async function setSourceKind(id: string, kind: string): Promise<void> {
   ]);
 }
 
+async function setCaptureMode(id: string, mode: "light" | "full"): Promise<void> {
+  const db = await getDb();
+  await db.runAsync("UPDATE bookmarks SET capture_mode = ? WHERE id = ?", [
+    mode,
+    id,
+  ]);
+}
+
 /** Le contenu récolté est-il exploitable, ou avons-nous reçu une page vide ? */
 function isUsable(result: ArchiveResult): boolean {
   const { title, content } = result.page;
@@ -61,13 +70,14 @@ export async function captureBookmark(
   const plan = planFor(kind);
   await setSourceKind(bookmarkId, kind);
 
-  if (!isWorkerReady()) {
-    throw new Error(
-      "Le moteur de rendu n'est pas prêt. Rouvre l'application et réessaie.",
-    );
-  }
+  // La WebView n'existe que dans un arbre React monté. Hors interface — donc
+  // chaque fois que le système réveille l'application pendant que
+  // l'utilisateur fait autre chose — on lit la page sans moteur de rendu.
+  // Auparavant on renonçait, et le lien restait en attente pour toujours.
+  const rendered = isWorkerReady();
 
   await setFetchStatus(bookmarkId, "running");
+  await setCaptureMode(bookmarkId, rendered ? "full" : "light");
 
   // Instagram sert un mur de connexion sur l'adresse normale. La page
   // d'intégration, prévue pour les sites tiers, rend la légende sans compte :
@@ -85,12 +95,14 @@ export async function captureBookmark(
 
   for (const target of attempts) {
     try {
-      const attempt = await enqueue(target, {
-        wantArchive: plan.wantArchive,
-        wantScreenshot: plan.wantScreenshot,
-        sourceKind: plan.kind,
-        extraSettleMs: plan.extraSettleMs,
-      });
+      const attempt = rendered
+        ? await enqueue(target, {
+            wantArchive: plan.wantArchive,
+            wantScreenshot: plan.wantScreenshot,
+            sourceKind: plan.kind,
+            extraSettleMs: plan.extraSettleMs,
+          })
+        : await fetchPage(target);
       result = attempt;
       if (isUsable(attempt)) break;
       // Page inexploitable : on garde le résultat comme repli et on tente la

@@ -2,7 +2,9 @@ import * as BackgroundTask from "expo-background-task";
 import * as TaskManager from "expo-task-manager";
 import { AppState } from "react-native";
 
+import { recordBackgroundRun } from "./heartbeat";
 import { isQueueLockHeld } from "./lock";
+import { countPendingWork } from "../db/bookmarks";
 import { processPending } from "./queue";
 
 /**
@@ -15,10 +17,12 @@ import { processPending } from "./queue";
  * depuis Instagram, l'application aussitôt refermée, reste en attente jusqu'au
  * prochain lancement.
  *
- * Seule l'étape IA tourne ici : l'extraction a besoin de la WebView de
- * `WebArchiver`, qui n'existe que dans un arbre React monté. Sans interface,
- * la file d'archivage n'aurait aucun consommateur et les demandes resteraient
- * en suspens jusqu'à expiration.
+ * Les deux étapes tournent ici. L'extraction se fait sans moteur de rendu —
+ * la WebView n'existe que dans un arbre React monté — donc sans capture
+ * d'écran ni archive autonome, mais avec le titre, le texte et les médias.
+ * C'est ce qu'il faut au modèle pour ranger, et c'est ce qui manquait : tant
+ * que l'extraction restait en attente, l'étape IA refusait de travailler et
+ * un lien jamais rouvert ne pouvait pas avancer d'un pouce.
  */
 
 export const AI_QUEUE_TASK = "karakeep-local.ai-queue";
@@ -40,14 +44,31 @@ TaskManager.defineTask(AI_QUEUE_TASK, async () => {
     // contexte llama.cpp chargé en parallèle demanderait deux fois plusieurs
     // gigaoctets — le système en tuerait un.
     if (AppState.currentState === "active") {
+      await recordBackgroundRun("Ignoré : l'application était ouverte.");
       return BackgroundTask.BackgroundTaskResult.Success;
     }
     if (await isQueueLockHeld()) {
+      await recordBackgroundRun("Ignoré : un traitement était déjà en cours.");
       return BackgroundTask.BackgroundTaskResult.Success;
     }
-    await processPending({ aiOnly: true, budgetMs: BUDGET_MS });
+
+    const before = await countPendingWork();
+    if (before === 0) {
+      await recordBackgroundRun("Rien à traiter.");
+      return BackgroundTask.BackgroundTaskResult.Success;
+    }
+
+    await processPending({ headless: true, budgetMs: BUDGET_MS });
+
+    const after = await countPendingWork();
+    await recordBackgroundRun(
+      before === after
+        ? `${before} en attente, aucun n'a pu être traité.`
+        : `${before - after} lien${before - after > 1 ? "s traités" : " traité"}, ${after} restant${after > 1 ? "s" : ""}.`,
+    );
     return BackgroundTask.BackgroundTaskResult.Success;
-  } catch {
+  } catch (err) {
+    await recordBackgroundRun(`Échec : ${(err as Error).message}`);
     return BackgroundTask.BackgroundTaskResult.Failed;
   }
 });

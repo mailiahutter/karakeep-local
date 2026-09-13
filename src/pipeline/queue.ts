@@ -17,6 +17,7 @@ import { findModel } from "../ai/models";
 import { modelPathFor } from "../ai/download";
 import {
   getBookmark,
+  lightlyCaptured,
   pendingBookmarks,
   resetInterruptedWork,
   setAiStatus,
@@ -270,13 +271,44 @@ async function runTagStage(deadline: () => boolean): Promise<number> {
   return done;
 }
 
+/**
+ * Reprend les pages lues sans moteur de rendu maintenant qu'il y en a un.
+ *
+ * Le travail d'arrière-plan rend la fiche exploitable tout de suite, ce qui
+ * est l'essentiel ; il lui manque la capture d'écran et l'archive autonome —
+ * c'est-à-dire justement ce qui survit à la disparition du site. On les
+ * complète dès qu'une session avec interface le permet, quelques-unes à la
+ * fois pour ne pas monopoliser l'application au démarrage.
+ */
+async function runUpgradeStage(deadline: () => boolean): Promise<number> {
+  const batch = await lightlyCaptured(3);
+  let done = 0;
+  for (const bookmark of batch) {
+    if (deadline()) break;
+    await beat();
+    setPhase("fetching", bookmark.id);
+    try {
+      await captureBookmark(bookmark.id, bookmark.url);
+      emit({ type: "bookmark-updated", bookmarkId: bookmark.id });
+      done++;
+    } catch {
+      // La version allégée reste en place : une reprise ratée ne doit pas
+      // dégrader une fiche déjà utilisable.
+    }
+  }
+  return done;
+}
+
 export interface ProcessOptions {
   /**
-   * N'exécuter que l'étape IA. C'est le seul choix possible hors interface :
-   * l'extraction a besoin de la WebView de `WebArchiver`, qui n'existe que
-   * dans un arbre React monté.
+   * Cycle déclenché par le système, sans interface montée.
+   *
+   * L'extraction se fait alors sans moteur de rendu : moins fidèle, mais elle
+   * a lieu. Auparavant ce mode n'exécutait que l'étape IA, laquelle refuse de
+   * travailler sur une extraction inachevée — un lien enregistré puis jamais
+   * rouvert ne pouvait donc jamais avancer.
    */
-  aiOnly?: boolean;
+  headless?: boolean;
   /** Temps maximal accordé au cycle, pour tenir dans une fenêtre système. */
   budgetMs?: number;
 }
@@ -300,7 +332,7 @@ export async function processPending(opts: ProcessOptions = {}): Promise<void> {
   // Une inférence dure des dizaines de secondes : sans cela, l'écran s'éteint
   // au milieu et Android suspend le fil JavaScript. Hors interface, il n'y a
   // pas d'activité à maintenir éveillée.
-  const keepAwake = !opts.aiOnly;
+  const keepAwake = !opts.headless;
   if (keepAwake) {
     try {
       await activateKeepAwakeAsync(KEEP_AWAKE_TAG);
@@ -315,12 +347,17 @@ export async function processPending(opts: ProcessOptions = {}): Promise<void> {
     do {
       rerun = false;
       const settings = await loadSettings();
-      const fetched =
-        !opts.aiOnly && settings.autoFetch ? await runFetchStage(deadline) : 0;
+      const fetched = settings.autoFetch ? await runFetchStage(deadline) : 0;
       const tagged = await runTagStage(deadline);
+      // Les reprises passent en dernier : elles améliorent l'existant, alors
+      // que les deux étapes précédentes débloquent des liens en attente.
+      const upgraded =
+        !opts.headless && fetched === 0 && tagged === 0
+          ? await runUpgradeStage(deadline)
+          : 0;
       if (deadline()) break;
       // Rien n'a bougé et rien de neuf n'est arrivé : le cycle est terminé.
-      if (fetched === 0 && tagged === 0 && !rerun) break;
+      if (fetched === 0 && tagged === 0 && upgraded === 0 && !rerun) break;
     } while (true);
   } finally {
     running = false;
