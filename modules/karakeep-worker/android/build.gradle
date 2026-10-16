@@ -16,3 +16,14 @@ android {
     abortOnError false
   }
 }
+
+dependencies {
+  // React Native n'est pas sur le classpath d'un module Expo par défaut :
+  // `expo-modules-core` le déclare en `implementation`, donc sans le
+  // transmettre. Le service étend `HeadlessJsTaskService`, il lui faut.
+  // `compileOnly` — et non `implementation` — parce que l'application
+  // embarque déjà React Native à l'exécution : c'est ainsi que les modules
+  // d'Expo eux-mêmes le déclarent. La version vient de la substitution
+  // opérée par le plugin Gradle de React Native.
+  compileOnly "com.facebook.react:react-android"
+}
