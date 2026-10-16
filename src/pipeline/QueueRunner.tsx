@@ -1,8 +1,11 @@
 import { useEffect } from "react";
 import { AppState } from "react-native";
 
+import { scheduleDailyWork, scheduledWindow } from "../../modules/karakeep-worker/src";
 import { registerAiBackgroundTask } from "./background";
+import { parseWindow } from "./schedule";
 import { processPending } from "./queue";
+import { loadSettings } from "../db/settings";
 import { notifyBookmarksChanged } from "../ui/events";
 
 /**
@@ -22,6 +25,18 @@ export function QueueRunner() {
 
     kick();
     void registerAiBackgroundTask();
+
+    // L'alarme ne survit ni à une réinstallation ni à un effacement des
+    // données ; le réglage, lui, part avec la sauvegarde. On réaligne les
+    // deux au lancement plutôt que de laisser la séance disparaître en
+    // silence.
+    void (async () => {
+      const { nightlyWork } = await loadSettings();
+      const wanted = parseWindow(nightlyWork);
+      if (wanted && !scheduledWindow()) {
+        scheduleDailyWork(wanted.hour, wanted.minute);
+      }
+    })();
 
     // Le retour au premier plan est le moment où le travail suspendu par la
     // mise en veille doit repartir.

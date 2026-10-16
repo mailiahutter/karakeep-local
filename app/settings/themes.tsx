@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useFocusEffect } from "expo-router";
 import {
   Alert,
@@ -77,14 +77,15 @@ export default function ThemesSettingsScreen() {
     setSaving(true);
     try {
       if (editing.kind === "theme") {
+        const icon = normalizeIconInput(editing.icon) ?? "📁";
         if (editing.id) {
           await updateTheme(editing.id, {
             name,
-            icon: editing.icon,
+            icon,
             description: editing.description,
           });
         } else {
-          await createTheme(name, editing.icon, editing.description);
+          await createTheme(name, icon, editing.description);
         }
       } else if (editing.id) {
         await updateSubtheme(editing.id, {
@@ -397,6 +398,7 @@ function EditorModal({
   onSave: () => void;
 }) {
   const t = useTheme();
+  const iconField = useRef<TextInput>(null);
   if (!editing) return null;
 
   const isTheme = editing.kind === "theme";
@@ -454,24 +456,35 @@ function EditorModal({
             <>
               <Text style={[styles.label, { color: t.textMuted }]}>Icône</Text>
               <Text style={[styles.help, { color: t.textFaint }]}>
-                N'importe quel emoji du clavier — ouvre l'onglet emoji et
-                choisis. Les raccourcis ci-dessous ne sont qu'un départ.
+                Touche le grand carré, puis ouvre l'onglet emoji de ton
+                clavier Android : n'importe lequel convient, y compris les
+                animaux, les drapeaux et les symboles. Les vignettes du bas ne
+                sont que des raccourcis.
               </Text>
               <Row>
-                <View
+                <Pressable
+                  onPress={() => iconField.current?.focus()}
+                  accessibilityRole="button"
+                  accessibilityLabel="Choisir une icône au clavier"
                   style={[
                     styles.iconPreview,
-                    { borderColor: t.border, backgroundColor: t.bg },
+                    { borderColor: t.accent, backgroundColor: t.bg },
                   ]}
                 >
-                  <ThemeIcon icon={editing.icon} size={26} color={t.accent} />
-                </View>
+                  {editing.icon.length > 0 ? (
+                    <ThemeIcon icon={editing.icon} size={34} color={t.accent} />
+                  ) : (
+                    <Ionicons name="happy-outline" size={28} color={t.textFaint} />
+                  )}
+                </Pressable>
                 <TextInput
+                  ref={iconField}
                   value={editing.icon}
-                  onChangeText={(raw) =>
-                    onChange({ ...editing, icon: normalizeIconInput(raw) ?? "" })
-                  }
-                  placeholder="🚐"
+                  // La saisie passe telle quelle : filtrer à chaque frappe
+                  // effaçait l'emoji avant que le clavier ait fini de le
+                  // composer. Le tri se fait à l'enregistrement.
+                  onChangeText={(raw) => onChange({ ...editing, icon: raw })}
+                  placeholder="😀 🐕 ⛺ 🏍️"
                   placeholderTextColor={t.textFaint}
                   style={[
                     styles.input,
@@ -564,8 +577,8 @@ const styles = StyleSheet.create({
   multiline: { minHeight: 88, textAlignVertical: "top" },
   icons: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
   iconPreview: {
-    width: 48,
-    height: 48,
+    width: 64,
+    height: 64,
     borderRadius: radius.md,
     borderWidth: 1,
     alignItems: "center",

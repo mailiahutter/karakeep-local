@@ -1,7 +1,9 @@
 import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
 
 import { captureBookmark } from "./capture";
+import { connectionKind } from "../ai/download";
 import { beat, releaseHeartbeat } from "./lock";
+import { isNetworkFailure } from "./retry";
 import {
   AI_TIMEOUTS,
   budgetExhausted,
@@ -16,6 +18,8 @@ import { isModelInstalled } from "../ai/download";
 import { findModel } from "../ai/models";
 import { modelPathFor } from "../ai/download";
 import {
+  clearFetchAttempts,
+  deferFetch,
   getBookmark,
   lightlyCaptured,
   pendingBookmarks,
@@ -110,6 +114,12 @@ async function recoverOnce(): Promise<void> {
 }
 
 async function runFetchStage(deadline: () => boolean): Promise<number> {
+  // Sans réseau, chaque tentative échouerait et condamnerait le lien. Une
+  // séance de nuit en mode avion suffisait à griller la file entière : on
+  // s'abstient, et l'étape suivante — entièrement locale — travaille quand
+  // même sur ce qui est déjà extrait.
+  if ((await connectionKind()) === "none") return 0;
+
   const batch = await pendingBookmarks("fetch_status", 20);
   let done = 0;
 
@@ -120,12 +130,20 @@ async function runFetchStage(deadline: () => boolean): Promise<number> {
     emit({ type: "fetching", bookmarkId: bookmark.id, url: bookmark.url });
     try {
       const outcome = await captureBookmark(bookmark.id, bookmark.url);
+      await clearFetchAttempts(bookmark.id);
       for (const note of outcome.notes) {
         emit({ type: "error", bookmarkId: bookmark.id, message: note });
       }
     } catch (err) {
       const message = (err as Error).message;
-      await setFetchStatus(bookmark.id, "error", message);
+      // Une coupure réseau laisse le lien en attente ; une page qui répond mal
+      // le condamne. Le compteur de tentatives évite qu'un lien réellement
+      // mort soit repris indéfiniment.
+      if (isNetworkFailure(message)) {
+        await deferFetch(bookmark.id, message);
+      } else {
+        await setFetchStatus(bookmark.id, "error", message);
+      }
       emit({ type: "error", bookmarkId: bookmark.id, message });
     }
     emit({ type: "bookmark-updated", bookmarkId: bookmark.id });

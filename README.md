@@ -48,17 +48,19 @@ savoir avant de choisir :
 - **Enregistrer un lien** : « Partager » depuis n'importe quelle application, ou
   le bouton `+`. L'écriture est immédiate ; l'extraction et le tagging suivent
   en arrière-plan.
-- **Traitement d'arrière-plan** : la file repart au lancement, à chaque retour
-  au premier plan, et — application fermée — sur un réveil confié à WorkManager,
-  au minimum toutes les quinze minutes. Ces réveils font **tout** le travail :
-  la page est alors lue sans moteur de rendu (le HTML servi, sans exécuter son
-  JavaScript), ce qui donne le titre, le texte, les métadonnées et les médias —
-  de quoi ranger. Il y manque la capture d'écran et l'archive autonome, qui
-  demandent une WebView : ces fiches sont marquées et complétées à la
-  prochaine ouverture de l'application.
-  Réglages → « Travail en arrière-plan » journalise chaque réveil : c'est le
-  seul moyen de distinguer « Android ne réveille pas » — presque toujours son
-  gestionnaire de batterie — de « le réveil a lieu et ne trouve rien ».
+- **Traitement d'arrière-plan** : un service au premier plan fait tourner la
+  file sans que l'application soit ouverte. Il tient le processeur éveillé,
+  écran éteint, affiche une notification permanente — ce qu'Android exige pour
+  autoriser ce travail — et s'arrête quand il n'y a plus rien à faire.
+  Réglages → « Travail en arrière-plan » le lance à la demande, ou programme
+  une **séance de nuit** quotidienne. Le mode avion ne la gêne pas : l'analyse
+  par le modèle est entièrement locale, et sans réseau l'extraction est
+  reportée plutôt que marquée en échec.
+  Les réveils confiés à WorkManager restent en second recours. Ils ne
+  suffisaient pas : sur Android 8 et au-delà, `expo-background-task` enchaîne
+  des tâches uniques dont chacune réarme la suivante, avec une contrainte de
+  réseau connecté — un maillon manqué et la chaîne s'arrête pour de bon.
+  Chaque réveil et chaque séance sont journalisés sur le même écran.
 - **Thèmes et sous-thèmes** modifiables : Réglages → « Thèmes et sous-thèmes »,
   ou le bouton « Gérer les thèmes » de l'onglet Thèmes. Chaque catégorie porte
   une **description**, et c'est elle que le modèle lit pour ranger un lien —

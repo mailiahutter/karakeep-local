@@ -1,0 +1,44 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+  <!-- Service au premier plan : la seule façon, sur Android, de poursuivre un
+       travail long écran éteint. Le type `dataSync` est obligatoire depuis
+       Android 14, et sa permission dédiée avec lui. -->
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+  <!-- Maintient le processeur éveillé pendant l'inférence, écran éteint. -->
+  <uses-permission android:name="android.permission.WAKE_LOCK" />
+  <!-- Réarme la fenêtre de travail après un redémarrage du téléphone. -->
+  <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+  <!--
+    Depuis Android 12, démarrer un service au premier plan depuis l'arrière-plan
+    est interdit, sauf exemption. Une alarme EXACTE en est une ; une alarme
+    inexacte, non — la séance de nuit échouerait alors en silence.
+    SCHEDULE_EXACT_ALARM couvre Android 12 et 12L, USE_EXACT_ALARM les versions
+    suivantes, où il est accordé d'office.
+  -->
+  <uses-permission
+    android:name="android.permission.SCHEDULE_EXACT_ALARM"
+    android:maxSdkVersion="32" />
+  <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+
+  <application>
+    <service
+      android:name=".WorkerService"
+      android:exported="false"
+      android:foregroundServiceType="dataSync" />
+
+    <receiver
+      android:name=".AlarmReceiver"
+      android:exported="false" />
+
+    <receiver
+      android:name=".BootReceiver"
+      android:exported="false"
+      android:enabled="true">
+      <intent-filter>
+        <action android:name="android.intent.action.BOOT_COMPLETED" />
+        <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+      </intent-filter>
+    </receiver>
+  </application>
+</manifest>

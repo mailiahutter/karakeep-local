@@ -409,3 +409,40 @@ export async function lightlyCaptured(limit = 3): Promise<Bookmark[]> {
   );
   return hydrate(rows);
 }
+
+/**
+ * Remet un lien en attente après un échec réseau, sans le condamner.
+ *
+ * Renvoie `false` quand le nombre de tentatives est épuisé : le lien passe
+ * alors en erreur comme n'importe quel autre échec.
+ */
+export async function deferFetch(
+  id: string,
+  reason: string,
+  maxAttempts = 5,
+): Promise<boolean> {
+  const db = await getDb();
+  const row = await db.getFirstAsync<{ fetch_attempts: number }>(
+    "SELECT fetch_attempts FROM bookmarks WHERE id = ?",
+    [id],
+  );
+  const attempts = (row?.fetch_attempts ?? 0) + 1;
+  if (attempts > maxAttempts) {
+    await db.runAsync(
+      "UPDATE bookmarks SET fetch_status = 'error', fetch_error = ?, fetch_attempts = ? WHERE id = ?",
+      [reason, attempts, id],
+    );
+    return false;
+  }
+  await db.runAsync(
+    "UPDATE bookmarks SET fetch_status = 'pending', fetch_error = ?, fetch_attempts = ? WHERE id = ?",
+    [reason, attempts, id],
+  );
+  return true;
+}
+
+/** Remet le compteur à zéro : une capture réussie efface l'historique. */
+export async function clearFetchAttempts(id: string): Promise<void> {
+  const db = await getDb();
+  await db.runAsync("UPDATE bookmarks SET fetch_attempts = 0 WHERE id = ?", [id]);
+}

@@ -315,4 +315,15 @@ export const MIGRATIONS: string[] = [
   ALTER TABLE bookmarks ADD COLUMN capture_mode TEXT;
   CREATE INDEX idx_bookmarks_capture_mode ON bookmarks(capture_mode);
   `,
+
+  // 010 — nombre de tentatives d'extraction.
+  //
+  // Une séance de nuit en mode avion faisait échouer toutes les captures, et
+  // les marquait en erreur définitive : une nuit suffisait à griller la file
+  // entière. Une panne de réseau doit laisser le lien en attente, pas le
+  // condamner — mais sans compteur, un lien réellement mort serait repris
+  // indéfiniment.
+  `
+  ALTER TABLE bookmarks ADD COLUMN fetch_attempts INTEGER NOT NULL DEFAULT 0;
+  `,
 ];

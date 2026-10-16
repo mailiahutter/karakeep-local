@@ -46,3 +46,19 @@ jobs:
       # une minute plutôt qu'après treize minutes de compilation native.
       - name: Vérifier l'empaquetage JavaScript
         run: npx expo export --platform android --output-dir /tmp/expo-export
+
+      # Le module natif embarqué ne passait par aucune vérification : une
+      # erreur Kotlin ne se serait vue qu'au moment de publier une release,
+      # treize minutes de build plus tard. On compile le module seul, ce qui
+      # suffit à attraper les fautes de frappe, les API absentes et les
+      # incompatibilités de manifeste.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Compiler le module natif
+        working-directory: android
+        run: ./gradlew :karakeep-worker:compileDebugKotlin --no-daemon

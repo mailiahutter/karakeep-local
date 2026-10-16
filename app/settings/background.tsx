@@ -3,9 +3,26 @@ import * as BackgroundTask from "expo-background-task";
 import * as IntentLauncher from "expo-intent-launcher";
 import { useFocusEffect } from "expo-router";
 import { useCallback, useState } from "react";
-import { Alert, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 
 import { countPendingWork } from "../../src/db/bookmarks";
+import { loadSettings, saveSetting } from "../../src/db/settings";
+import {
+  cancelDailyWork,
+  isWorkerAvailable,
+  isWorkerRunning,
+  scheduleDailyWork,
+  startWorker,
+  stopWorker,
+  workerDiagnostics,
+  type WorkerDiagnostics,
+} from "../../modules/karakeep-worker/src";
+import {
+  formatWindow,
+  nextOccurrence,
+  parseWindow,
+  untilLabel,
+} from "../../src/pipeline/schedule";
 import { AI_QUEUE_TASK, registerAiBackgroundTask } from "../../src/pipeline/background";
 import { readBackgroundLog, type BackgroundRun } from "../../src/pipeline/heartbeat";
 import { Button, Card, Row, SectionTitle } from "../../src/ui/components";
@@ -24,10 +41,16 @@ export default function BackgroundScreen() {
   const [log, setLog] = useState<BackgroundRun[]>([]);
   const [pending, setPending] = useState(0);
   const [available, setAvailable] = useState<boolean | null>(null);
+  const [working, setWorking] = useState(false);
+  const [windowText, setWindowText] = useState("");
+  const [diag, setDiag] = useState<WorkerDiagnostics | null>(null);
 
   const load = useCallback(async () => {
     setLog(await readBackgroundLog());
     setPending(await countPendingWork());
+    setWorking(isWorkerRunning());
+    setDiag(workerDiagnostics());
+    setWindowText((await loadSettings()).nightlyWork);
     try {
       const status = await BackgroundTask.getStatusAsync();
       setAvailable(status === BackgroundTask.BackgroundTaskStatus.Available);
@@ -54,11 +77,136 @@ export default function BackgroundScreen() {
     >
       <Card>
         <Text style={[styles.intro, { color: t.textMuted }]}>
-          Android réveille l'application à intervalles qu'il choisit lui-même,
-          au minimum toutes les quinze minutes. Chaque réveil lit les pages en
-          attente et les fait analyser par le modèle. C'est lent, mais ça
-          avance sans que tu aies à ouvrir l'application.
+          Une séance de travail traite les liens en attente sans que
+          l'application soit ouverte : elle tient le processeur éveillé, écran
+          éteint, et s'arrête quand il n'y a plus rien à faire. Une
+          notification permanente l'accompagne — c'est ce qu'Android exige
+          pour autoriser ce travail, et c'est aussi comment tu l'arrêtes.
         </Text>
+      </Card>
+
+      <Card style={working ? { borderColor: t.success } : undefined}>
+        <Row>
+          <Ionicons
+            name={working ? "sync" : "moon-outline"}
+            size={19}
+            color={working ? t.success : t.accent}
+          />
+          <Text style={[styles.stat, { color: t.text }]}>
+            {working ? "Séance en cours" : "Séance à la demande"}
+          </Text>
+        </Row>
+        <Text style={[styles.hint, { color: t.textMuted }]}>
+          {pending} lien{pending > 1 ? "s" : ""} en attente. Lance une séance
+          maintenant, pose le téléphone, et reviens plus tard.
+        </Text>
+        <Button
+          label={working ? "Arrêter la séance" : "Travailler maintenant"}
+          icon={working ? "stop-circle-outline" : "play"}
+          variant={working ? "secondary" : "primary"}
+          onPress={() => {
+            if (working) {
+              stopWorker();
+              setWorking(false);
+              return;
+            }
+            if (!startWorker()) {
+              Alert.alert(
+                "Service indisponible",
+                "Cette version de l'application n'embarque pas le service de travail. Installe la dernière version.",
+              );
+              return;
+            }
+            setWorking(true);
+          }}
+        />
+      </Card>
+
+      <Card>
+        <Row>
+          <Ionicons name="alarm-outline" size={19} color={t.accent} />
+          <Text style={[styles.stat, { color: t.text }]}>Séance de nuit</Text>
+        </Row>
+        <Text style={[styles.hint, { color: t.textMuted }]}>
+          À l'heure indiquée, chaque nuit, l'application se met au travail
+          seule. Le mode avion ne la gêne pas : l'analyse par le modèle est
+          entièrement locale — seule la lecture des pages neuves demande du
+          réseau.
+        </Text>
+        <Row>
+          <TextInput
+            value={windowText}
+            onChangeText={setWindowText}
+            placeholder="03:00"
+            placeholderTextColor={t.textFaint}
+            keyboardType="numbers-and-punctuation"
+            style={[
+              styles.input,
+              { color: t.text, borderColor: t.border, backgroundColor: t.surface },
+            ]}
+          />
+          <Button
+            label="Programmer"
+            icon="checkmark"
+            style={styles.grow}
+            onPress={() => {
+              const parsed = parseWindow(windowText);
+              if (!parsed) {
+                Alert.alert(
+                  "Heure illisible",
+                  "Écris l'heure sous la forme 03:00.",
+                );
+                return;
+              }
+              void (async () => {
+                const at = scheduleDailyWork(parsed.hour, parsed.minute);
+                await saveSetting("nightlyWork", formatWindow(parsed));
+                await load();
+                Alert.alert(
+                  "Séance programmée",
+                  `Prochaine séance ${untilLabel(at ?? nextOccurrence(parsed))}.`,
+                );
+              })();
+            }}
+          />
+        </Row>
+        <Button
+          label="Supprimer la séance de nuit"
+          variant="ghost"
+          onPress={() => {
+            cancelDailyWork();
+            void saveSetting("nightlyWork", "").then(load);
+          }}
+        />
+        {!isWorkerAvailable() && (
+          <Text style={[styles.hint, { color: t.warning }]}>
+            Le service n'est pas présent dans cette version de l'application.
+          </Text>
+        )}
+
+        {/* Android peut refuser le démarrage de deux façons, toutes deux
+            silencieuses. Les taire, c'est reproduire exactement le problème
+            qu'on vient de passer des semaines à chercher. */}
+        {diag && !diag.canScheduleExact && (
+          <Text style={[styles.hint, { color: t.warning }]}>
+            Android interdit les alarmes exactes à cette application. Sans
+            elles, il refusera de démarrer la séance de nuit. Autorise
+            « Alarmes et rappels » dans les réglages de l'application.
+          </Text>
+        )}
+        {diag && !diag.ignoringBatteryOptimizations && (
+          <Text style={[styles.hint, { color: t.warning }]}>
+            L'application est soumise à l'optimisation de batterie. C'est la
+            cause la plus fréquente d'une séance qui ne démarre jamais : passe
+            par le bouton ci-dessous.
+          </Text>
+        )}
+        {diag?.lastAlarmResult && diag.lastAlarmResult !== "ok" && (
+          <Text style={[styles.hint, { color: t.warning }]}>
+            Dernier déclenchement refusé par le système :{" "}
+            {diag.lastAlarmResult}
+          </Text>
+        )}
       </Card>
 
       <Card style={stale ? { borderColor: t.warning } : undefined}>
@@ -156,6 +304,16 @@ const styles = StyleSheet.create({
   intro: { fontSize: 13.5, lineHeight: 20 },
   stat: { fontSize: 15.5, fontWeight: "700", flex: 1 },
   hint: { fontSize: 12.5, lineHeight: 17 },
+  grow: { flex: 1 },
+  input: {
+    width: 96,
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+    fontSize: 16,
+    textAlign: "center",
+  },
   run: { paddingHorizontal: spacing.lg },
   runTime: { fontSize: 11.5, fontWeight: "600" },
 });

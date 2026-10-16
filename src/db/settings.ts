@@ -28,6 +28,8 @@ export interface Settings {
   aiOnlyWhenCharging: boolean;
   /** Proposer la relecture des propositions du modèle à l'ouverture. */
   reviewOnLaunch: boolean;
+  /** Heure de la séance de travail quotidienne, « HH:MM », vide si aucune. */
+  nightlyWork: string;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -39,6 +41,7 @@ export const DEFAULT_SETTINGS: Settings = {
   autoFetch: true,
   aiOnlyWhenCharging: false,
   reviewOnLaunch: true,
+  nightlyWork: "03:00",
 };
 
 export async function loadSettings(): Promise<Settings> {
