@@ -57,7 +57,17 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - uses: android-actions/setup-android@v3
+      # Le SDK Android est déjà installé sur l'image du runner, licences
+      # acceptées. `android-actions/setup-android` ajoutait par-dessus un
+      # paquet « tools » retiré depuis du dépôt Google, et échouait pour
+      # cette seule raison. On se contente de vérifier que le SDK est là —
+      # bruyamment, pour qu'un changement d'image ne passe pas inaperçu.
+      - name: Vérifier le SDK Android du runner
+        run: |
+          set -euo pipefail
+          test -n "${ANDROID_HOME:-}" || { echo "ANDROID_HOME absent"; exit 1; }
+          test -d "$ANDROID_HOME/platforms" || { echo "Aucune plateforme installée"; exit 1; }
+          ls "$ANDROID_HOME/platforms"
 
       - name: Compiler le module natif
         working-directory: android
