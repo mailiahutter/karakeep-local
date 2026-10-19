@@ -17,6 +17,7 @@ import { BookmarkCard } from "../../src/ui/BookmarkCard";
 import { EmptyState } from "../../src/ui/components";
 import { QueueBanner } from "../../src/ui/QueueBanner";
 import { ReviewBanner } from "../../src/ui/ReviewBanner";
+import { RecapBanner } from "../../src/ui/RecapBanner";
 import { notifyBookmarksChanged, useBookmarksRevision } from "../../src/ui/events";
 import { radius, spacing, useTheme } from "../../src/ui/theme";
 
@@ -123,6 +124,7 @@ export default function BookmarksScreen() {
         })}
       </View>
 
+      <RecapBanner />
       <QueueBanner />
       <ReviewBanner />
 
