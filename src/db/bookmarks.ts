@@ -246,8 +246,10 @@ export async function setAiStatus(
 ): Promise<void> {
   const db = await getDb();
   await db.runAsync(
-    "UPDATE bookmarks SET ai_status = ?, ai_error = ?, updated_at = ? WHERE id = ?",
-    [status, error ?? null, Date.now(), id],
+    `UPDATE bookmarks SET ai_status = ?, ai_error = ?, updated_at = ?,
+       analysed_at = CASE WHEN ? = 'success' THEN ? ELSE analysed_at END
+     WHERE id = ?`,
+    [status, error ?? null, Date.now(), status, Date.now(), id],
   );
 }
 

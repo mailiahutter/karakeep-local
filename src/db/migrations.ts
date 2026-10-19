@@ -360,4 +360,45 @@ export const MIGRATIONS: string[] = [
                 OR subject IS NULL OR trim(subject) = ''))
      );
   `,
+
+  // 012 — version 3.0.
+  //
+  // - `embeddings` : vecteurs de sens du petit modèle de proximité, mis en
+  //   cache. Calculer celui d'un thème ou d'un exemple à chaque lien
+  //   coûterait plus que l'analyse elle-même. `hash` dit sur quel texte il a
+  //   été calculé : un thème renommé ou redécrit est recalculé.
+  // - `ocr_text` : le texte lu dans les images. NULL tant que la lecture n'a
+  //   pas eu lieu, chaîne vide quand elle n'a rien trouvé.
+  // - `next_fetch_at` et `source_gone` : un lien qui ne répond pas est
+  //   réessayé le lendemain plutôt que condamné ; au bout de plusieurs jours,
+  //   la source est déclarée disparue — ce qui a été sauvegardé reste.
+  // - `analysed_at` : date de la dernière analyse réussie, pour le bilan de
+  //   la nuit.
+  // - `highlights` : passages surlignés, avec une note facultative.
+  `
+  CREATE TABLE embeddings (
+    key        TEXT PRIMARY KEY NOT NULL,
+    model      TEXT NOT NULL,
+    hash       TEXT NOT NULL,
+    vector     TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+  );
+
+  ALTER TABLE bookmarks ADD COLUMN ocr_text TEXT;
+  ALTER TABLE bookmarks ADD COLUMN next_fetch_at INTEGER;
+  ALTER TABLE bookmarks ADD COLUMN source_gone INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE bookmarks ADD COLUMN analysed_at INTEGER;
+  UPDATE bookmarks SET analysed_at = updated_at WHERE ai_status = 'success';
+  CREATE INDEX idx_bookmarks_analysed ON bookmarks(analysed_at);
+
+  CREATE TABLE highlights (
+    id          TEXT PRIMARY KEY NOT NULL,
+    bookmark_id TEXT NOT NULL REFERENCES bookmarks(id) ON DELETE CASCADE,
+    text        TEXT NOT NULL,
+    note        TEXT,
+    position    INTEGER NOT NULL DEFAULT 0,
+    created_at  INTEGER NOT NULL
+  );
+  CREATE INDEX idx_highlights_bookmark ON highlights(bookmark_id, position);
+  `,
 ];

@@ -7,7 +7,9 @@ import {
   buildSubthemeOptions,
   buildThemeOptions,
   parseChoice,
+  pickExamples,
   resolveChoice,
+  shortlist,
   type ThemeTree,
 } from "./classify.ts";
 
@@ -141,4 +143,61 @@ test("zéro et illisible ne rangent nulle part", () => {
 
 test("une arborescence vide ne propose rien", () => {
   assert.deepEqual(buildThemeOptions([]), []);
+});
+
+test("les exemples de l'utilisateur sont montrés avec le numéro de leur catégorie", () => {
+  const options = buildThemeOptions(TREE);
+  const examples = pickExamples(
+    [
+      { text: "Une Triumph Bonneville d'occasion", optionId: "t-moto" },
+      { text: "Col du Stelvio à moto", optionId: "t-road" },
+      { text: "Thème supprimé depuis", optionId: "t-absent" },
+    ],
+    options,
+  );
+  const prompt = buildChoicePrompt(options, "Titre : Ducati Scrambler", "Aucune", examples);
+  assert.match(prompt, /« Une Triumph Bonneville d'occasion » → 1\. Moto/);
+  assert.match(prompt, /« Col du Stelvio à moto » → 2\. Destinations roadtrip/);
+  assert.doesNotMatch(prompt, /supprimé/);
+});
+
+test("sans exemple, le prompt ne mentionne pas d'exemples", () => {
+  const prompt = buildChoicePrompt(buildThemeOptions(TREE), "x", "Aucune");
+  assert.doesNotMatch(prompt, /déjà rangés/);
+});
+
+test("un thème très fourni n'écrase pas les autres exemples", () => {
+  const options = buildThemeOptions(TREE);
+  const many = Array.from({ length: 6 }, (_, i) => ({ text: `Moto ${i}`, optionId: "t-moto" }));
+  const picked = pickExamples([...many, { text: "Route 66", optionId: "t-road" }], options);
+  assert.equal(picked.filter((e) => e.optionId === "t-moto").length, 2);
+  assert.ok(picked.some((e) => e.optionId === "t-road"));
+});
+
+test("le pré-tri garde les catégories les plus proches et renumérote", () => {
+  const options = [
+    { index: 1, id: "a", name: "A", description: null },
+    { index: 2, id: "b", name: "B", description: null },
+    { index: 3, id: "c", name: "C", description: null },
+    { index: 4, id: "d", name: "D", description: null },
+    { index: 5, id: "e", name: "E", description: null },
+  ];
+  const vectors = new Map([
+    ["a", [1, 0]],
+    ["b", [0, 1]],
+    ["c", [0.9, 0.1]],
+    ["d", [-1, 0]],
+    ["e", [0.7, 0.7]],
+  ]);
+  const kept = shortlist(options, [1, 0], vectors, 2);
+  assert.deepEqual(kept.map((o) => o.id), ["a", "c"]);
+  assert.deepEqual(kept.map((o) => o.index), [1, 2]);
+});
+
+test("une catégorie sans vecteur n'est jamais écartée", () => {
+  const options = buildThemeOptions([...TREE, { id: "t-x", name: "X", subthemes: [] }, { id: "t-y", name: "Y", subthemes: [] }]);
+  const vectors = new Map([["t-moto", [1, 0]], ["t-road", [0, 1]], ["t-divers", [0, 1]], ["t-x", [0, 1]]]);
+  const kept = shortlist(options, [1, 0], vectors, 2);
+  assert.ok(kept.some((o) => o.id === "t-y"));
+  assert.ok(kept.some((o) => o.id === "t-moto"));
 });

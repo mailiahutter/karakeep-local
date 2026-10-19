@@ -31,6 +31,8 @@ import {
 } from "../db/bookmarks";
 import { replaceAiTags } from "../db/tags";
 import { loadSettings } from "../db/settings";
+import { listClassificationExamples } from "../db/examples";
+import { embed, embedCached, ensureEmbedderDownloaded } from "../ai/embed";
 
 /**
  * File de traitement d'arrière-plan.
@@ -168,6 +170,8 @@ async function runTagStage(deadline: () => boolean): Promise<number> {
     return 0;
   }
 
+  void ensureEmbedderDownloaded();
+
   const modelPath = modelPathFor(model);
   const batch = await pendingBookmarks("ai_status", 10);
   let done = 0;
@@ -222,6 +226,8 @@ async function runTagStage(deadline: () => boolean): Promise<number> {
           onToken: (step, produced) =>
             emit({ type: "generating", step, tokens: produced }),
           onLoadProgress,
+          examples: await listClassificationExamples(bookmark.id),
+          embed: (key, text) => (key ? embedCached(key, text) : embed(text)),
         },
       );
 

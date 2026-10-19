@@ -15,6 +15,7 @@ import {
   type ModelDownload,
 } from "../../src/ai/download";
 import { releaseModel } from "../../src/ai/llm";
+import { EMBEDDING_MODEL, isEmbedderInstalled, releaseEmbedder } from "../../src/ai/embed";
 import {
   MODELS,
   findModel,
@@ -236,6 +237,8 @@ export default function ModelScreen() {
         </Card>
       )}
 
+      <EmbedderCard />
+
       <SectionTitle>Modèles disponibles</SectionTitle>
 
       {MODELS.map((model) => {
@@ -362,3 +365,87 @@ const styles = StyleSheet.create({
     marginTop: spacing.md,
   },
 });
+
+/**
+ * Le modèle de proximité : facultatif, léger, et téléchargé seul en Wi-Fi.
+ * Cette carte dit où il en est et permet de le lancer sans attendre.
+ */
+function EmbedderCard() {
+  const t = useTheme();
+  const [installed, setInstalled] = useState<boolean | null>(null);
+  const [ratio, setRatio] = useState<number | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const refresh = useCallback(async () => {
+    setInstalled(await isEmbedderInstalled());
+  }, []);
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  const start = async (allowCellular = false) => {
+    setBusy(true);
+    try {
+      const task = await downloadModel(
+        EMBEDDING_MODEL,
+        (p) => setRatio(p.ratio),
+        { allowCellular },
+      );
+      await task.promise;
+      await refresh();
+    } catch (err) {
+      if (err instanceof CellularBlockedError) {
+        Alert.alert("Données mobiles", `Le modèle pèse ${formatBytes(EMBEDDING_MODEL.bytes)}.`, [
+          { text: "Annuler", style: "cancel" },
+          { text: "Télécharger quand même", onPress: () => void start(true) },
+        ]);
+      } else {
+        Alert.alert("Téléchargement interrompu", (err as Error).message);
+      }
+    } finally {
+      setBusy(false);
+      setRatio(null);
+    }
+  };
+
+  return (
+    <Card>
+      <Row>
+        <Ionicons name="git-compare-outline" size={19} color={t.accent} />
+        <Text style={[styles.notes, { color: t.text, flex: 1, fontWeight: "600" }]}>
+          Rangement par proximité de sens
+        </Text>
+      </Row>
+      <Text style={[styles.notes, { color: t.textMuted }]}>
+        {EMBEDDING_MODEL.notes} {formatBytes(EMBEDDING_MODEL.bytes)}, téléchargé
+        automatiquement en Wi-Fi.
+      </Text>
+      {busy && <ProgressBar ratio={ratio} />}
+      {installed ? (
+        <Row>
+          <Ionicons name="checkmark-circle" size={18} color={t.success} />
+          <Text style={[styles.notes, { color: t.success, flex: 1 }]}>Installé et utilisé</Text>
+          <Button
+            label="Supprimer"
+            icon="trash-outline"
+            variant="secondary"
+            onPress={() => {
+              void (async () => {
+                await releaseEmbedder();
+                await deleteModel(EMBEDDING_MODEL);
+                await refresh();
+              })();
+            }}
+          />
+        </Row>
+      ) : (
+        <Button
+          label={busy ? "Téléchargement…" : "Télécharger maintenant"}
+          icon="download-outline"
+          disabled={busy}
+          onPress={() => void start()}
+        />
+      )}
+    </Card>
+  );
+}
