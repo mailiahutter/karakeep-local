@@ -20,6 +20,8 @@ import { modelPathFor } from "../ai/download";
 import {
   clearFetchAttempts,
   deferFetch,
+  failFetch,
+  promoteDueRetries,
   getBookmark,
   lightlyCaptured,
   pendingBookmarks,
@@ -125,6 +127,7 @@ async function runFetchStage(deadline: () => boolean): Promise<number> {
   // même sur ce qui est déjà extrait.
   if ((await connectionKind()) === "none") return 0;
   await refreshYtdlpWeekly();
+  await promoteDueRetries();
 
   const batch = await pendingBookmarks("fetch_status", 20);
   let done = 0;
@@ -148,7 +151,7 @@ async function runFetchStage(deadline: () => boolean): Promise<number> {
       if (isNetworkFailure(message)) {
         await deferFetch(bookmark.id, message);
       } else {
-        await setFetchStatus(bookmark.id, "error", message);
+        await failFetch(bookmark.id, message);
       }
       emit({ type: "error", bookmarkId: bookmark.id, message });
     }

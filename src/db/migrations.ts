@@ -369,7 +369,7 @@ export const MIGRATIONS: string[] = [
   //   été calculé : un thème renommé ou redécrit est recalculé.
   // - `ocr_text` : le texte lu dans les images. NULL tant que la lecture n'a
   //   pas eu lieu, chaîne vide quand elle n'a rien trouvé.
-  // - `next_fetch_at` et `source_gone` : un lien qui ne répond pas est
+  // - `next_fetch_at`, `retry_days` et `source_gone` : un lien qui ne répond pas est
   //   réessayé le lendemain plutôt que condamné ; au bout de plusieurs jours,
   //   la source est déclarée disparue — ce qui a été sauvegardé reste.
   // - `analysed_at` : date de la dernière analyse réussie, pour le bilan de
@@ -387,6 +387,7 @@ export const MIGRATIONS: string[] = [
   ALTER TABLE bookmarks ADD COLUMN ocr_text TEXT;
   ALTER TABLE bookmarks ADD COLUMN next_fetch_at INTEGER;
   ALTER TABLE bookmarks ADD COLUMN source_gone INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE bookmarks ADD COLUMN retry_days INTEGER NOT NULL DEFAULT 0;
   ALTER TABLE bookmarks ADD COLUMN analysed_at INTEGER;
   UPDATE bookmarks SET analysed_at = updated_at WHERE ai_status = 'success';
   CREATE INDEX idx_bookmarks_analysed ON bookmarks(analysed_at);

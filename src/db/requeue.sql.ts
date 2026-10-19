@@ -16,7 +16,8 @@
 
 export const REQUEUE_FETCH = `
   UPDATE bookmarks
-     SET fetch_status = 'pending', fetch_attempts = 0, fetch_error = NULL
+     SET fetch_status = 'pending', fetch_attempts = 0, fetch_error = NULL,
+         retry_days = 0, next_fetch_at = NULL, source_gone = 0
    WHERE archived = 0
      AND (
        fetch_status IN ('error', 'running')

@@ -387,7 +387,11 @@ export default function BookmarkScreen() {
           <Row>
             <Ionicons name="alert-circle-outline" size={19} color={t.warning} />
             <Text style={[styles.sectionLabel, { color: t.warning, flex: 1 }]}>
-              Traitement incomplet
+              {bookmark.sourceGone
+                ? "Source disparue"
+                : bookmark.nextFetchAt && bookmark.fetchStatus === "error"
+                  ? "Nouvel essai prévu demain"
+                  : "Traitement incomplet"}
             </Text>
           </Row>
           <Text style={[styles.hint, { color: t.textMuted }]}>

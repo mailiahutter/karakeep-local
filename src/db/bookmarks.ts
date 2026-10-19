@@ -2,6 +2,7 @@ import * as Crypto from "expo-crypto";
 
 import { getDb } from "./client";
 import { REQUEUE_AI, REQUEUE_FETCH } from "./requeue.sql";
+import { planRetry, retryMessage } from "../pipeline/retryPlan";
 import { toFtsQuery } from "./fts";
 import { normalizeUrl } from "./urls";
 import {
@@ -445,10 +446,9 @@ export async function deferFetch(
   );
   const attempts = (row?.fetch_attempts ?? 0) + 1;
   if (attempts > maxAttempts) {
-    await db.runAsync(
-      "UPDATE bookmarks SET fetch_status = 'error', fetch_error = ?, fetch_attempts = ? WHERE id = ?",
-      [reason, attempts, id],
-    );
+    // Toujours pas de réseau pour ce lien : on cesse d'insister aujourd'hui,
+    // et on réessaie demain plutôt que de le condamner.
+    await failFetch(id, reason);
     return false;
   }
   await db.runAsync(
@@ -461,5 +461,42 @@ export async function deferFetch(
 /** Remet le compteur à zéro : une capture réussie efface l'historique. */
 export async function clearFetchAttempts(id: string): Promise<void> {
   const db = await getDb();
-  await db.runAsync("UPDATE bookmarks SET fetch_attempts = 0 WHERE id = ?", [id]);
+  await db.runAsync(
+    `UPDATE bookmarks SET fetch_attempts = 0, retry_days = 0, next_fetch_at = NULL, source_gone = 0
+     WHERE id = ? AND fetch_status = 'success'`,
+    [id],
+  );
+}
+
+/**
+ * Échec de capture : nouvel essai le lendemain, ou source déclarée disparue
+ * après plusieurs jours (voir `retryPlan.ts`). Renvoie le message affiché.
+ */
+export async function failFetch(id: string, reason: string): Promise<string> {
+  const db = await getDb();
+  const row = await db.getFirstAsync<{ retry_days: number }>(
+    "SELECT retry_days FROM bookmarks WHERE id = ?",
+    [id],
+  );
+  const decision = planRetry(row?.retry_days ?? 0, Date.now());
+  const message = retryMessage(reason, decision);
+  await db.runAsync(
+    `UPDATE bookmarks SET fetch_status = 'error', fetch_error = ?, retry_days = ?,
+       fetch_attempts = 0, next_fetch_at = ?, source_gone = ?, updated_at = ?
+     WHERE id = ?`,
+    [message, decision.attempts, decision.nextAt, decision.gone ? 1 : 0, Date.now(), id],
+  );
+  return message;
+}
+
+/** Remet en file les liens dont le nouvel essai est arrivé à échéance. */
+export async function promoteDueRetries(now = Date.now()): Promise<number> {
+  const db = await getDb();
+  const result = await db.runAsync(
+    `UPDATE bookmarks SET fetch_status = 'pending'
+     WHERE fetch_status = 'error' AND source_gone = 0
+       AND next_fetch_at IS NOT NULL AND next_fetch_at <= ?`,
+    [now],
+  );
+  return result.changes;
 }

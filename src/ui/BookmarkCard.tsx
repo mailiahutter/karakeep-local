@@ -23,6 +23,24 @@ function relativeDate(ts: number): string {
 function StatusHint({ bookmark }: { bookmark: Bookmark }) {
   const t = useTheme();
 
+  if (bookmark.fetchStatus === "error" && (bookmark.sourceGone || bookmark.nextFetchAt)) {
+    // Ni l'un ni l'autre n'est une panne à réparer : la fiche reste
+    // consultable, et l'application s'occupe seule du nouvel essai.
+    return (
+      <View style={styles.status}>
+        <Ionicons
+          name={bookmark.sourceGone ? "archive-outline" : "time-outline"}
+          size={13}
+          color={t.textFaint}
+        />
+        <Text style={[styles.statusText, { color: t.textFaint }]} numberOfLines={1}>
+          {bookmark.sourceGone
+            ? "Source disparue · sauvegarde conservée"
+            : "Site injoignable · nouvel essai demain"}
+        </Text>
+      </View>
+    );
+  }
   if (bookmark.fetchStatus === "error") {
     return (
       <View style={styles.status}>

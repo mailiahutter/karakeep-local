@@ -5,7 +5,7 @@ import {
   listAssets,
   saveText,
 } from "../db/assets";
-import { saveExtractedContent, setFetchStatus } from "../db/bookmarks";
+import { failFetch, saveExtractedContent, setFetchStatus } from "../db/bookmarks";
 import { detectSource, planFor, youtubeThumbnail, type SourcePlan } from "../archive/sources";
 import {
   captionWithoutHashtags,
@@ -376,8 +376,12 @@ export async function captureBookmark(
           : "Instagram n'a pas servi la publication. Connecte-toi depuis Réglages → Compte Instagram, puis relance."
         : lastError?.message ??
           "Rien n'a pu être récupéré de cette page. Ouvre-la pour vérifier qu'elle est toujours en ligne.";
-    notes.push(reason);
-    await setFetchStatus(bookmarkId, hadMedia ? "success" : "error", hadMedia ? undefined : reason);
+    if (hadMedia) {
+      notes.push(reason);
+      await setFetchStatus(bookmarkId, "success");
+    } else {
+      notes.push(await failFetch(bookmarkId, reason));
+    }
     return outcome;
   }
 
@@ -448,8 +452,7 @@ export async function captureBookmark(
   if (!hasText && !hasMedia) {
     const reason =
       "Rien n'a pu être récupéré de cette page. Relance la capture, ou ouvre-la pour vérifier qu'elle est toujours en ligne.";
-    notes.push(reason);
-    await setFetchStatus(bookmarkId, "error", reason);
+    notes.push(await failFetch(bookmarkId, reason));
     return outcome;
   }
 

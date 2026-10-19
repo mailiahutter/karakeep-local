@@ -37,6 +37,8 @@ export interface BookmarkRow {
   theme_id: string | null;
   subtheme_id: string | null;
   theme_source: "ai" | "human" | null;
+  next_fetch_at?: number | null;
+  source_gone?: number;
 }
 
 export interface Tag {
@@ -84,6 +86,13 @@ export interface Bookmark {
   themeId: string | null;
   subthemeId: string | null;
   themeSource: "ai" | "human" | null;
+  /** Prochaine tentative de capture, quand la dernière a échoué. */
+  nextFetchAt: number | null;
+  /**
+   * La source ne répond plus depuis plusieurs jours. Ce qui a été conservé
+   * reste consultable : c'est précisément pour cela qu'on archive.
+   */
+  sourceGone: boolean;
   tags: Tag[];
 }
 
@@ -120,6 +129,8 @@ export function rowToBookmark(
     themeId: row.theme_id ?? null,
     subthemeId: row.subtheme_id ?? null,
     themeSource: row.theme_source ?? null,
+    nextFetchAt: row.next_fetch_at ?? null,
+    sourceGone: row.source_gone === 1,
     tags,
   };
 }
