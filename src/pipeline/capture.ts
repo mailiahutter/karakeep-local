@@ -1,33 +1,44 @@
 import {
   adoptFile,
-  deleteAssetsFor,
+  deleteAssets,
   downloadAsset,
+  listAssets,
   saveText,
 } from "../db/assets";
 import { saveExtractedContent, setFetchStatus } from "../db/bookmarks";
-import { detectSource, planFor, youtubeThumbnail } from "../archive/sources";
+import { detectSource, planFor, youtubeThumbnail, type SourcePlan } from "../archive/sources";
 import {
   captionWithoutHashtags,
   hashtagsFrom,
   instagramEmbedUrl,
+  instagramShortcode,
   isStatsBoilerplate,
   looksLikeLoginWall,
   usefulHashtags,
   mediaIdentity,
   pickCarousel,
 } from "../archive/instagram";
+import { fetchInstagramPost } from "../archive/igApi";
+import type { IgMedia } from "../archive/igParse";
+import { noteAttempt, rankedMethods } from "../archive/igMethods";
 import { pickImages } from "../archive/images";
 import { fetchPage } from "../archive/fetchPage";
 import { enqueue, isWorkerReady } from "../archive/queue";
-import type { ArchiveResult, CapturedImage } from "../archive/types";
+import type { CapturedImage, CapturedVideo } from "../archive/types";
 import { getDb } from "../db/client";
+import { isNetworkFailure } from "./retry";
 
 /**
- * Capture complète d'un lien : rendu par le moteur d'Android, extraction, puis
- * conservation des pièces sur l'appareil.
+ * Capture complète d'un lien : lecture, extraction, puis conservation des
+ * pièces sur l'appareil.
  *
- * Remplace le worker `crawler` de Karakeep. Le JavaScript du site est exécuté
- * avant extraction, comme le ferait un Chrome sans interface côté serveur.
+ * Pour Instagram, deux méthodes coexistent et se relaient :
+ * - « api » interroge les adresses de données d'Instagram, à la manière de
+ *   Cobalt : médias exacts, carrousel complet et dans l'ordre ;
+ * - « page » lit la page elle-même, par la WebView quand l'interface est
+ *   montée, ou par une simple requête sinon.
+ * La plus fiable sur cet appareil passe en premier ; si elle échoue, l'autre
+ * prend le relais. Les autres sites passent par la lecture de page.
  */
 
 export interface CaptureOutcome {
@@ -36,30 +47,164 @@ export interface CaptureOutcome {
   images: number;
   videos: number;
   hashtags: number;
+  /** Méthode qui a fourni les données, pour le journal. */
+  via: string | null;
   notes: string[];
+}
+
+/** Ce qu'une méthode a pu rassembler, avant tout enregistrement. */
+interface Gathered {
+  via: string;
+  title: string | null;
+  description: string | null;
+  content: string;
+  author: string | null;
+  siteName: string | null;
+  imageUrl: string | null;
+  publishedAt: number | null;
+  screenshotUri?: string;
+  archiveHtml?: string | null;
+  archiveError?: string;
+  /** Médias connus exactement (API), ou à trier parmi ceux de la page. */
+  exact: IgMedia[] | null;
+  images: CapturedImage[];
+  videos: CapturedVideo[];
+  /** La page a-t-elle livré quelque chose d'exploitable ? */
+  usable: boolean;
+  /** Lue sans moteur de rendu : capture d'écran et archive manquent. */
+  light: boolean;
 }
 
 async function setSourceKind(id: string, kind: string): Promise<void> {
   const db = await getDb();
-  await db.runAsync("UPDATE bookmarks SET source_kind = ? WHERE id = ?", [
-    kind,
-    id,
-  ]);
+  await db.runAsync("UPDATE bookmarks SET source_kind = ? WHERE id = ?", [kind, id]);
 }
 
 async function setCaptureMode(id: string, mode: "light" | "full"): Promise<void> {
   const db = await getDb();
-  await db.runAsync("UPDATE bookmarks SET capture_mode = ? WHERE id = ?", [
-    mode,
-    id,
-  ]);
+  await db.runAsync("UPDATE bookmarks SET capture_mode = ? WHERE id = ?", [mode, id]);
 }
 
-/** Le contenu récolté est-il exploitable, ou avons-nous reçu une page vide ? */
-function isUsable(result: ArchiveResult): boolean {
-  const { title, content } = result.page;
-  return !looksLikeLoginWall(title, content) && content.trim().length >= 40;
+/**
+ * Un titre lisible tiré de la légende.
+ *
+ * La liste affichait « Instagram » sur chaque publication, ce qui ne disait
+ * rien de son contenu. La première phrase de la légende, débarrassée de ses
+ * hashtags, fait bien mieux.
+ */
+export function titleFromCaption(caption: string, author: string | null): string | null {
+  const clean = captionWithoutHashtags(caption).split(/\n+/)[0]?.trim() ?? "";
+  if (clean.length > 0) {
+    const sentence = clean.split(/(?<=[.!?])\s/)[0];
+    return sentence.length <= 90 ? sentence : `${sentence.slice(0, 87).trimEnd()}…`;
+  }
+  return author ? `Publication de @${author}` : null;
 }
+
+// --- Méthode « api » (Instagram) -----------------------------------------
+
+async function gatherInstagramApi(url: string): Promise<Gathered | null> {
+  const shortcode = instagramShortcode(url);
+  if (!shortcode) return null;
+  const result = await fetchInstagramPost(shortcode);
+  if (!result) return null;
+  const { post } = result;
+  const firstImage = post.items.find((m) => m.thumb)?.thumb ?? null;
+  return {
+    via: `instagram-${result.via}`,
+    title: titleFromCaption(post.caption, post.author),
+    description: post.caption || null,
+    content: post.caption,
+    author: post.author,
+    siteName: "Instagram",
+    imageUrl: firstImage,
+    publishedAt: post.takenAt ? post.takenAt * 1000 : null,
+    exact: post.items,
+    images: [],
+    videos: [],
+    usable: true,
+    light: false,
+  };
+}
+
+// --- Méthode « page » ------------------------------------------------------
+
+async function gatherPage(
+  url: string,
+  kind: ReturnType<typeof detectSource>,
+  plan: SourcePlan,
+): Promise<{ gathered: Gathered | null; error: Error | null }> {
+  // La WebView n'existe que dans un arbre React monté. Hors interface, on lit
+  // la page sans moteur de rendu plutôt que de renoncer.
+  const rendered = isWorkerReady();
+
+  // Instagram sert un mur de connexion sur l'adresse normale ; sa page
+  // d'intégration, prévue pour les sites tiers, est essayée en premier.
+  const targets: string[] = [];
+  if (kind === "instagram") {
+    const embed = instagramEmbedUrl(url);
+    if (embed) targets.push(embed);
+  }
+  targets.push(url);
+
+  let best: Gathered | null = null;
+  let lastError: Error | null = null;
+
+  for (const target of targets) {
+    try {
+      const result = rendered
+        ? await enqueue(target, {
+            wantArchive: plan.wantArchive,
+            wantScreenshot: plan.wantScreenshot,
+            sourceKind: plan.kind,
+            extraSettleMs: plan.extraSettleMs,
+          })
+        : await fetchPage(target);
+      const page = result.page;
+      let description = page.description;
+      let content = page.content;
+      if (kind === "instagram") {
+        // « 472 likes, 1 comments - … » n'est pas une légende.
+        if (isStatsBoilerplate(description)) description = null;
+        if (isStatsBoilerplate(content)) content = "";
+        if (page.igCaption) {
+          description = page.igCaption;
+          content = page.igCaption;
+        }
+      }
+      const usable =
+        !looksLikeLoginWall(page.title, page.content) && page.content.trim().length >= 40;
+      const gathered: Gathered = {
+        via: rendered ? "page-rendue" : "page-lue",
+        title:
+          kind === "instagram" && content
+            ? titleFromCaption(content, page.author) ?? page.title
+            : page.title,
+        description,
+        content,
+        author: page.author,
+        siteName: page.siteName,
+        imageUrl: page.imageUrl,
+        publishedAt: page.publishedAt ? Date.parse(page.publishedAt) || null : null,
+        screenshotUri: result.screenshotUri,
+        archiveHtml: result.archiveHtml,
+        archiveError: result.archiveError,
+        exact: null,
+        images: page.images,
+        videos: page.videos,
+        usable,
+        light: !rendered,
+      };
+      if (usable) return { gathered, error: null };
+      best ??= gathered;
+    } catch (err) {
+      lastError = err as Error;
+    }
+  }
+  return { gathered: best, error: lastError };
+}
+
+// --- Capture ---------------------------------------------------------------
 
 export async function captureBookmark(
   bookmarkId: string,
@@ -69,89 +214,46 @@ export async function captureBookmark(
   const kind = detectSource(url);
   const plan = planFor(kind);
   await setSourceKind(bookmarkId, kind);
-
-  // La WebView n'existe que dans un arbre React monté. Hors interface — donc
-  // chaque fois que le système réveille l'application pendant que
-  // l'utilisateur fait autre chose — on lit la page sans moteur de rendu.
-  // Auparavant on renonçait, et le lien restait en attente pour toujours.
-  const rendered = isWorkerReady();
-
   await setFetchStatus(bookmarkId, "running");
-  await setCaptureMode(bookmarkId, rendered ? "full" : "light");
 
-  // Instagram sert un mur de connexion sur l'adresse normale. La page
-  // d'intégration, prévue pour les sites tiers, rend la légende sans compte :
-  // on l'essaie en premier, l'adresse d'origine servant de repli si une
-  // session est ouverte dans l'application.
-  const attempts: string[] = [];
-  if (kind === "instagram") {
-    const embed = instagramEmbedUrl(url);
-    if (embed) attempts.push(embed);
-  }
-  attempts.push(url);
+  // Les pièces déjà conservées ne sont remplacées qu'une fois la nouvelle
+  // capture réussie. Les effacer d'abord détruisait l'archive d'une
+  // publication supprimée entre-temps — ce que l'application doit justement
+  // préserver.
+  const previous = await listAssets(bookmarkId);
 
-  let result: ArchiveResult | null = null;
+  let source: Gathered | null = null;
+  let fallback: Gathered | null = null;
   let lastError: Error | null = null;
 
-  for (const target of attempts) {
-    try {
-      const attempt = rendered
-        ? await enqueue(target, {
-            wantArchive: plan.wantArchive,
-            wantScreenshot: plan.wantScreenshot,
-            sourceKind: plan.kind,
-            extraSettleMs: plan.extraSettleMs,
-          })
-        : await fetchPage(target);
-      result = attempt;
-      if (isUsable(attempt)) break;
-      // Page inexploitable : on garde le résultat comme repli et on tente la
-      // suivante plutôt que d'enregistrer du vide.
-    } catch (err) {
-      lastError = err as Error;
+  const methods = kind === "instagram" ? await rankedMethods() : (["page"] as const);
+  for (const method of methods) {
+    if (method === "api") {
+      let g: Gathered | null = null;
+      try {
+        g = await gatherInstagramApi(url);
+      } catch (err) {
+        lastError = err as Error;
+      }
+      await noteAttempt("api", g !== null);
+      if (g) {
+        source = g;
+        break;
+      }
+    } else {
+      const { gathered, error } = await gatherPage(url, kind, plan);
+      if (error) lastError = error;
+      if (kind === "instagram") await noteAttempt("page", !!gathered?.usable);
+      if (gathered?.usable) {
+        source = gathered;
+        break;
+      }
+      fallback ??= gathered;
+    }
+    if (kind === "instagram") {
+      notes.push(`Méthode « ${method} » sans résultat, bascule sur la suivante.`);
     }
   }
-
-  if (!result) {
-    const message = lastError?.message ?? "Aucune page n'a pu être chargée";
-    await setFetchStatus(bookmarkId, "error", message);
-    throw new Error(message);
-  }
-
-  const page = result.page;
-
-  // --- Description et contenu ---------------------------------------
-  let description = page.description;
-  let content = page.content;
-
-  if (kind === "instagram") {
-    // « 472 likes, 1 comments - … » n'est pas une légende : l'enregistrer
-    // priverait le tagging et le résumé de toute matière.
-    if (isStatsBoilerplate(description)) description = null;
-    if (isStatsBoilerplate(content)) content = "";
-    if (page.igCaption) {
-      description = page.igCaption;
-      content = page.igCaption;
-    }
-  }
-
-  const blocked = !isUsable(result) && kind === "instagram";
-  if (blocked) {
-    notes.push(
-      "Instagram n'a pas servi la publication : mur de connexion. " +
-        "Connecte-toi depuis Réglages → Compte Instagram, puis relance.",
-    );
-  }
-
-  await saveExtractedContent(bookmarkId, {
-    title: page.title,
-    description,
-    content: content.trim().length > 0 ? content : null,
-    author: page.author,
-    siteName: page.siteName,
-    imageUrl: page.imageUrl,
-    publishedAt: page.publishedAt ? Date.parse(page.publishedAt) || null : null,
-  });
 
   const outcome: CaptureOutcome = {
     screenshot: false,
@@ -159,167 +261,169 @@ export async function captureBookmark(
     images: 0,
     videos: 0,
     hashtags: 0,
+    via: source?.via ?? null,
     notes,
   };
 
-  // --- Hashtags de la légende ---------------------------------------
-  //
-  // Ils étaient enregistrés tels quels comme tags. Le résultat était
-  // inutilisable : vingt-neuf tags sur une publication, mêlant français,
-  // anglais et allemand, dont « photooftheday » et « summer ». Deux
-  // publications sur le même sujet ne partageaient alors aucun tag.
-  //
-  // Ce sont pourtant des mots choisis par l'auteur, donc un bon indice. On les
-  // garde comme tels — filtrés, plafonnés, joints au texte soumis au modèle —
-  // et c'est le modèle qui produit les tags, dans une seule langue.
+  if (!source) {
+    // Rien d'exploitable. Une coupure réseau remonte telle quelle : la file
+    // remet alors le lien en attente au lieu de le condamner. Sinon, erreur
+    // explicite — et ce qui avait été conservé auparavant reste intact.
+    if (!fallback && lastError && isNetworkFailure(lastError.message)) throw lastError;
+    const hadMedia = previous.some((a) => a.kind === "image" || a.kind === "video");
+    const reason =
+      kind === "instagram"
+        ? hadMedia
+          ? "Instagram ne sert plus cette publication. Ce qui avait été conservé reste disponible."
+          : "Instagram n'a pas servi la publication. Connecte-toi depuis Réglages → Compte Instagram, puis relance."
+        : lastError?.message ??
+          "Rien n'a pu être récupéré de cette page. Ouvre-la pour vérifier qu'elle est toujours en ligne.";
+    notes.push(reason);
+    await setFetchStatus(bookmarkId, hadMedia ? "success" : "error", hadMedia ? undefined : reason);
+    return outcome;
+  }
+
+  // --- Texte -----------------------------------------------------------
+  let content = source.content;
   if (kind === "instagram" && content) {
+    // Les hashtags sont un indice choisi par l'auteur, pas des tags : filtrés,
+    // plafonnés, ils rejoignent le texte soumis au modèle.
     const tags = usefulHashtags(hashtagsFrom(content));
     outcome.hashtags = tags.length;
-    const caption = captionWithoutHashtags(content);
-    const rebuilt = [
-      caption,
+    content = [
+      captionWithoutHashtags(content),
       tags.length > 0 ? `Mots-clés de l'auteur : ${tags.join(", ")}` : "",
     ]
       .filter((part) => part.length > 0)
       .join("\n\n");
-    if (rebuilt.length > 0) {
-      await saveExtractedContent(bookmarkId, { content: rebuilt });
-    }
   }
 
-  // Les pièces d'une capture précédente sont effacées maintenant, et pas
-  // avant : une nouvelle tentative qui échouerait ne doit pas laisser la fiche
-  // vide. Sans cela, chaque relance empilait un jeu de plus — d'où les
-  // « vidéo 57 Mo, vidéo 57 Mo » et les vieilles vignettes de 4 Ko qu'un
-  // filtre plus récent aurait écartées.
-  await deleteAssetsFor(bookmarkId);
+  await saveExtractedContent(bookmarkId, {
+    title: source.title,
+    description: source.description,
+    content: content.trim().length > 0 ? content : null,
+    author: source.author,
+    siteName: source.siteName,
+    imageUrl: source.imageUrl,
+    publishedAt: source.publishedAt,
+  });
 
-  // --- Capture d'écran ---
-  if (result.screenshotUri) {
+  // --- Capture d'écran et archive ---------------------------------------
+  if (source.screenshotUri) {
     try {
-      await adoptFile(bookmarkId, "screenshot", result.screenshotUri, url);
+      await adoptFile(bookmarkId, "screenshot", source.screenshotUri, url);
       outcome.screenshot = true;
     } catch (err) {
       notes.push(`Capture d'écran non conservée : ${(err as Error).message}`);
     }
   }
-
-  // --- Archive autonome ---
-  if (result.archiveHtml) {
+  if (source.archiveHtml) {
     try {
-      await saveText(bookmarkId, "archive", result.archiveHtml, url);
+      await saveText(bookmarkId, "archive", source.archiveHtml, url);
       outcome.archive = true;
     } catch (err) {
       notes.push(`Archive non conservée : ${(err as Error).message}`);
     }
-  } else if (result.archiveError) {
-    notes.push(`Archive incomplète : ${result.archiveError}`);
+  } else if (source.archiveError) {
+    notes.push(`Archive incomplète : ${source.archiveError}`);
   }
 
-  // --- Vidéos (avant les images : leur présence change le tri) ---------
+  // --- Médias -----------------------------------------------------------
+  if (source.exact) {
+    await downloadExact(bookmarkId, source.exact, plan, outcome);
+  } else {
+    await downloadGuessed(bookmarkId, url, kind, plan, source, outcome);
+  }
+
+  const fresh = outcome.images + outcome.videos + (outcome.screenshot ? 1 : 0) + (outcome.archive ? 1 : 0);
+  if (fresh > 0) await deleteAssets(previous);
+
+  const hasText = !!source.description || content.trim().length > 0;
+  const hasMedia = outcome.images + outcome.videos > 0 ||
+    previous.some((a) => a.kind === "image" || a.kind === "video");
+  if (!hasText && !hasMedia) {
+    const reason =
+      "Rien n'a pu être récupéré de cette page. Relance la capture, ou ouvre-la pour vérifier qu'elle est toujours en ligne.";
+    notes.push(reason);
+    await setFetchStatus(bookmarkId, "error", reason);
+    return outcome;
+  }
+
+  // Une publication lue par l'API est complète : rien à reprendre plus tard.
+  await setCaptureMode(bookmarkId, source.light && !source.exact ? "light" : "full");
+  await setFetchStatus(bookmarkId, "success");
+  return outcome;
+}
+
+/** Médias connus exactement : tous, dans l'ordre, sans tri ni filtre de poids. */
+async function downloadExact(
+  bookmarkId: string,
+  items: IgMedia[],
+  plan: SourcePlan,
+  outcome: CaptureOutcome,
+): Promise<void> {
+  let coverKept = false;
+  for (const item of items.slice(0, plan.maxImages)) {
+    if (item.type === "video") {
+      if (plan.wantVideo && (await downloadAsset(bookmarkId, "video", item.url, 200 * 1024 * 1024))) {
+        outcome.videos++;
+      }
+      // La vignette de la première vidéo sert de couverture dans la liste.
+      if (!coverKept && item.thumb && (await downloadAsset(bookmarkId, "image", item.thumb, 20 * 1024 * 1024))) {
+        outcome.images++;
+        coverKept = true;
+      }
+    } else if (await downloadAsset(bookmarkId, "image", item.url, 20 * 1024 * 1024)) {
+      outcome.images++;
+      coverKept = true;
+    }
+  }
+}
+
+/** Médias à trier parmi ceux de la page : la méthode historique. */
+async function downloadGuessed(
+  bookmarkId: string,
+  url: string,
+  kind: ReturnType<typeof detectSource>,
+  plan: SourcePlan,
+  source: Gathered,
+  outcome: CaptureOutcome,
+): Promise<void> {
   // Instagram publie le même fichier en plusieurs qualités : sans
   // dédoublonnage, la même vidéo était conservée deux fois.
-  const seenVideos = new Set<string>();
-  const videoUrls = page.videos.filter((v) => {
+  const seen = new Set<string>();
+  const videos = source.videos.filter((v) => {
     if (v.kind !== "file") return false;
     const key = mediaIdentity(v.url);
-    if (seenVideos.has(key)) return false;
-    seenVideos.add(key);
+    if (seen.has(key)) return false;
+    seen.add(key);
     return true;
   });
   if (plan.wantVideo) {
-    for (const video of videoUrls.slice(0, 2)) {
-      if (
-        await downloadAsset(bookmarkId, "video", video.url, 200 * 1024 * 1024)
-      ) {
-        outcome.videos++;
-      }
+    for (const video of videos.slice(0, 2)) {
+      if (await downloadAsset(bookmarkId, "video", video.url, 200 * 1024 * 1024)) outcome.videos++;
     }
     if (outcome.videos === 0 && kind === "youtube") {
-      // YouTube ne sert pas de flux téléchargeable : ses adresses média sont
-      // signées et éphémères. Il faudrait yt-dlp, absent d'Android sans
-      // module natif dédié.
-      notes.push(
-        "Vidéo YouTube non conservée : titre, description et miniature le sont.",
-      );
-    } else if (outcome.videos === 0 && kind === "instagram") {
-      notes.push(
-        "Aucune vidéo trouvée. Si la publication en contient une, connecte-toi " +
-          "depuis Réglages → Compte Instagram : l'adresse du fichier n'est " +
-          "servie qu'à une session ouverte.",
-      );
+      outcome.notes.push("Vidéo YouTube non conservée : titre, description et miniature le sont.");
     }
   }
 
-  // --- Images ---------------------------------------------------------
-  // Une icône pèse quelques kilo-octets, une vraie illustration bien plus.
-  // C'est le seul critère fiable : le DOM annonce des dimensions nulles tant
-  // que l'image n'est pas chargée.
+  // Sans dimensions fiables, le poids du fichier écarte icônes et avatars.
   const minImageBytes = kind === "instagram" ? 30_000 : 15_000;
-
   let images: CapturedImage[];
   if (kind === "instagram") {
-    // Dédoublonne le carrousel : Instagram sert chaque média en plusieurs
-    // résolutions, et y mêle avatars et icônes.
     images = pickCarousel(
-      page.images.map((i) => ({
-        url: i.url,
-        width: i.width,
-        height: i.height,
-      })),
+      source.images.map((i) => ({ url: i.url, width: i.width, height: i.height })),
       plan.maxImages,
     ).map((m) => ({ url: m.url, width: m.width, height: m.height, alt: null }));
-
-    // Sur une publication vidéo, les « images » ne sont que des vignettes du
-    // lecteur : une seule suffit comme illustration.
     if (outcome.videos > 0) images = images.slice(0, 2);
   } else {
-    // La vignette du site — son `og:image` — passe en tête : c'est l'image
-    // qu'il a lui-même choisie pour représenter la page, et celle que
-    // l'application affiche déjà. Ne pas la conserver revenait à montrer une
-    // photo qui s'évapore le jour où le site ferme.
-    const ogImage =
-      kind === "youtube" ? (youtubeThumbnail(url) ?? page.imageUrl) : page.imageUrl;
-    images = pickImages(page.images, { ogImage, max: plan.maxImages });
+    const ogImage = kind === "youtube" ? (youtubeThumbnail(url) ?? source.imageUrl) : source.imageUrl;
+    images = pickImages(source.images, { ogImage, max: plan.maxImages });
   }
-
   for (const img of images) {
-    if (
-      await downloadAsset(
-        bookmarkId,
-        "image",
-        img.url,
-        20 * 1024 * 1024,
-        minImageBytes,
-      )
-    ) {
+    if (await downloadAsset(bookmarkId, "image", img.url, 20 * 1024 * 1024, minImageBytes)) {
       outcome.images++;
     }
   }
-
-  // Une capture qui ne rapporte ni texte ni média n'est pas une réussite.
-  // Elle produisait pourtant une fiche d'apparence normale — un titre
-  // « Instagram » et rien d'autre — qu'on ne pouvait distinguer d'une
-  // publication réellement vide, ni relancer.
-  const empty =
-    !description &&
-    content.trim().length === 0 &&
-    outcome.images === 0 &&
-    outcome.videos === 0;
-
-  if (blocked) {
-    await setFetchStatus(bookmarkId, "error", notes[0]);
-  } else if (empty) {
-    const reason =
-      kind === "instagram"
-        ? "Rien n'a pu être récupéré de cette publication. Si elle existe " +
-          "toujours, connecte-toi depuis Réglages → Compte Instagram, puis relance."
-        : "Rien n'a pu être récupéré de cette page. Relance la capture, ou " +
-          "ouvre-la pour vérifier qu'elle est toujours en ligne.";
-    notes.push(reason);
-    await setFetchStatus(bookmarkId, "error", reason);
-  } else {
-    await setFetchStatus(bookmarkId, "success");
-  }
-  return outcome;
 }

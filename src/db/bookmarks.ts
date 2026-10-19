@@ -1,6 +1,7 @@
 import * as Crypto from "expo-crypto";
 
 import { getDb } from "./client";
+import { REQUEUE_AI, REQUEUE_FETCH } from "./requeue.sql";
 import { toFtsQuery } from "./fts";
 import { normalizeUrl } from "./urls";
 import {
@@ -390,6 +391,20 @@ export async function requeueAutoClassified(): Promise<number> {
        AND (theme_source IS NULL OR theme_source <> 'human')`,
   );
   return result.changes;
+}
+
+/**
+ * Remet en file tout ce qui n'a pas abouti : extraction en erreur, fiche
+ * vide, analyse sautée ou incomplète. Renvoie le nombre de liens désormais
+ * en attente.
+ */
+export async function requeueUnfinished(): Promise<number> {
+  const db = await getDb();
+  await db.withTransactionAsync(async () => {
+    await db.runAsync(REQUEUE_FETCH);
+    await db.runAsync(REQUEUE_AI);
+  });
+  return countPendingWork();
 }
 
 /**

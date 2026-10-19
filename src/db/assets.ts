@@ -193,3 +193,19 @@ export async function totalAssetBytes(): Promise<number> {
   );
   return row?.total ?? 0;
 }
+
+/**
+ * Supprime des pièces précises, fichiers compris.
+ *
+ * Sert à remplacer les pièces d'une capture précédente seulement une fois la
+ * nouvelle réussie : effacer d'abord détruisait l'archive d'une publication
+ * supprimée entre-temps — précisément ce que l'application doit préserver.
+ */
+export async function deleteAssets(assets: Asset[]): Promise<void> {
+  if (assets.length === 0) return;
+  const db = await getDb();
+  for (const asset of assets) {
+    await FileSystem.deleteAsync(asset.path, { idempotent: true });
+    await db.runAsync("DELETE FROM assets WHERE id = ?", [asset.id]);
+  }
+}

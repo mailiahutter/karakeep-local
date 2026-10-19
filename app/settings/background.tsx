@@ -5,7 +5,9 @@ import { useFocusEffect } from "expo-router";
 import { useCallback, useState } from "react";
 import { Alert, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 
-import { countPendingWork } from "../../src/db/bookmarks";
+import { countPendingWork, requeueUnfinished } from "../../src/db/bookmarks";
+import { processPending } from "../../src/pipeline/queue";
+import { notifyBookmarksChanged } from "../../src/ui/events";
 import { loadSettings, saveSetting } from "../../src/db/settings";
 import {
   cancelDailyWork,
@@ -118,6 +120,37 @@ export default function BackgroundScreen() {
               return;
             }
             setWorking(true);
+          }}
+        />
+      </Card>
+
+      <Card>
+        <Row>
+          <Ionicons name="refresh-circle-outline" size={19} color={t.accent} />
+          <Text style={[styles.stat, { color: t.text }]}>Tout relancer</Text>
+        </Row>
+        <Text style={[styles.hint, { color: t.textMuted }]}>
+          Remet en file chaque lien resté en plan : page jamais lue ou en
+          erreur, fiche vide, analyse sautée, rangement ou résumé manquant. Ce
+          que tu as rangé à la main reste à sa place.
+        </Text>
+        <Button
+          label="Tout relancer"
+          icon="refresh"
+          variant="secondary"
+          onPress={() => {
+            void (async () => {
+              const n = await requeueUnfinished();
+              setPending(n);
+              notifyBookmarksChanged();
+              void processPending().then(notifyBookmarksChanged);
+              Alert.alert(
+                "Relance faite",
+                n === 0
+                  ? "Tout est déjà traité."
+                  : `${n} lien${n > 1 ? "s" : ""} en attente. Ils avancent dès qu'une séance tourne — de nuit, ou avec « Travailler maintenant ».`,
+              );
+            })();
           }}
         />
       </Card>

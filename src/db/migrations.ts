@@ -326,4 +326,38 @@ export const MIGRATIONS: string[] = [
   `
   ALTER TABLE bookmarks ADD COLUMN fetch_attempts INTEGER NOT NULL DEFAULT 0;
   `,
+
+  // 011 — tout reprendre.
+  //
+  // Beaucoup de fiches étaient restées en plan : extraction en erreur après
+  // une nuit sans réseau, analyse jamais lancée, fiche vide, rangement absent.
+  // Les publications Instagram repassent toutes une fois : la nouvelle
+  // méthode (reprise de Cobalt) récupère chaque photo du carrousel et la vidéo
+  // en pleine qualité, là où l'ancienne devinait à partir de la page.
+  //
+  // Copie figée des requêtes de \`requeue.sql.ts\` : une migration ne doit plus
+  // changer une fois publiée, même si le bouton « Tout relancer » évolue.
+  `
+  UPDATE bookmarks
+     SET fetch_status = 'pending', fetch_attempts = 0, fetch_error = NULL
+   WHERE archived = 0
+     AND (
+       fetch_status IN ('error', 'running')
+       OR source_kind = 'instagram'
+       OR (fetch_status = 'success'
+           AND (content IS NULL OR trim(content) = '')
+           AND NOT EXISTS (SELECT 1 FROM assets a WHERE a.bookmark_id = bookmarks.id))
+     );
+  UPDATE bookmarks
+     SET ai_status = 'pending', ai_error = NULL
+   WHERE archived = 0
+     AND (
+       fetch_status = 'pending'
+       OR ai_status IN ('error', 'skipped', 'running')
+       OR (ai_status = 'success'
+           AND (theme_id IS NULL
+                OR summary IS NULL OR trim(summary) = ''
+                OR subject IS NULL OR trim(subject) = ''))
+     );
+  `,
 ];
