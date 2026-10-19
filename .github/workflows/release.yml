@@ -41,6 +41,17 @@ jobs:
             exit 0
           fi
           VERSION=$(node -p "require('./package.json').version")
+          # Une dépendance ajoutée modifie aussi package.json : seule une
+          # version qui change déclenche une publication.
+          BEFORE="${{ github.event.before }}"
+          if [ -n "$BEFORE" ] && git fetch --quiet --depth=1 origin "$BEFORE" 2>/dev/null; then
+            PREVIOUS=$(git show "$BEFORE:package.json" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>console.log(JSON.parse(s).version))")
+            if [ "$PREVIOUS" = "$VERSION" ]; then
+              echo "Version inchangée ($VERSION) : rien à publier."
+              echo "release=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
           if git ls-remote --exit-code --tags origin "refs/tags/v$VERSION" >/dev/null; then
             echo "v$VERSION existe déjà : rien à publier."
             echo "release=false" >> "$GITHUB_OUTPUT"
