@@ -9,10 +9,16 @@ import {
   pickExamples,
   resolveChoice,
   shortlist,
+  SUGGEST_JSON_SCHEMA,
+  SUGGEST_SYSTEM_PROMPT,
+  buildSuggestPrompt,
+  parseSuggestion,
   type ClassifyExample,
   type ClassifyOption,
+  type ThemeSuggestion,
   type ThemeTree,
 } from "./classify";
+import { choiceDistribution, type TokenProbs } from "./confidence";
 import {
   DIGEST_JSON_SCHEMA,
   DIGEST_SYSTEM_PROMPT,
@@ -76,6 +82,12 @@ export interface Analysis {
   digest: Digest | null;
   themeId: string | null;
   subthemeId: string | null;
+  /** Probabilité donnée au tiroir retenu, de 0 à 1 ; `null` si non mesurée. */
+  confidence: number | null;
+  /** Les autres tiroirs envisagés, du plus au moins probable. */
+  alternatives: Alternative[];
+  /** Tiroir à créer, quand aucun ne convenait. */
+  suggestion: ThemeSuggestion | null;
   /** Ce qui a été soumis au classement : précieux pour comprendre un raté. */
   classifiedFrom: string;
 }
@@ -144,7 +156,18 @@ async function optionVectors(
   return out;
 }
 
-/** Une question fermée : renvoie l'identifiant retenu, ou rien. */
+export interface Alternative {
+  id: string;
+  p: number;
+}
+
+interface Choice {
+  id: string | null;
+  confidence: number | null;
+  alternatives: Alternative[];
+}
+
+/** Une question fermée : l'identifiant retenu, avec la certitude mesurée. */
 async function choose(
   options: ClassifyOption[],
   document: string,
@@ -152,8 +175,9 @@ async function choose(
   step: "theme" | "subtheme",
   run: AnalyseRun,
   examples: ClassifyExample[],
-): Promise<string | null> {
-  if (options.length === 0) return null;
+): Promise<Choice> {
+  if (options.length === 0) return { id: null, confidence: null, alternatives: [] };
+  let probs: TokenProbs[] | null = null;
   const raw = await complete(run.modelPath, {
     system: CLASSIFY_SYSTEM_PROMPT,
     prompt: buildChoicePrompt(options, document, noneLabel, pickExamples(examples, options)),
@@ -162,8 +186,41 @@ async function choose(
     maxTokens: 12,
     timeoutMs: run.choiceTimeoutMs,
     onToken: (n) => run.onToken?.(step, n),
+    nProbs: 10,
+    onProbabilities: (p) => {
+      probs = p;
+    },
   });
-  return resolveChoice(options, parseChoice(raw, options.length));
+  const id = resolveChoice(options, parseChoice(raw, options.length));
+  const dist = choiceDistribution(probs, options.length);
+  const byIndex = new Map(options.map((o) => [o.index, o.id]));
+  const chosen = options.find((o) => o.id === id);
+  const confidence = chosen && dist ? (dist.find((d) => d.index === chosen.index)?.p ?? 0) : null;
+  const alternatives = (dist ?? [])
+    .map((d) => ({ id: byIndex.get(d.index) ?? "", p: d.p }))
+    .filter((a) => a.id && a.id !== id && a.p >= 0.02)
+    .slice(0, 2);
+  return { id, confidence, alternatives };
+}
+
+/** Aucun tiroir ne convient : en proposer un, prérempli. */
+async function suggest(
+  document: string,
+  themes: ThemeTree[],
+  run: AnalyseRun,
+): Promise<ThemeSuggestion | null> {
+  try {
+    const raw = await complete(run.modelPath, {
+      system: SUGGEST_SYSTEM_PROMPT,
+      prompt: buildSuggestPrompt(document, themes.map((t) => t.name)),
+      jsonSchema: SUGGEST_JSON_SCHEMA,
+      maxTokens: 80,
+      timeoutMs: run.choiceTimeoutMs,
+    });
+    return parseSuggestion(raw);
+  } catch {
+    return null;
+  }
 }
 
 export async function analyseBookmark(
@@ -195,7 +252,7 @@ export async function analyseBookmark(
   const themeOptions = docVector
     ? shortlist(allThemes, docVector, await optionVectors(run, allThemes, themeExamples, "t"), SHORTLIST_SIZE)
     : allThemes;
-  const themeId = await choose(
+  const themeChoice = await choose(
     themeOptions,
     document,
     "Aucune de ces catégories",
@@ -203,11 +260,25 @@ export async function analyseBookmark(
     run,
     themeExamples,
   );
-  if (!themeId) return { digest, themeId: null, subthemeId: null, classifiedFrom: document };
+  const themeId = themeChoice.id;
+  const base = {
+    digest,
+    confidence: themeChoice.confidence,
+    alternatives: themeChoice.alternatives,
+    classifiedFrom: document,
+  };
+  if (!themeId) {
+    return {
+      ...base,
+      themeId: null,
+      subthemeId: null,
+      suggestion: await suggest(document, themes, run),
+    };
+  }
 
   const theme = themes.find((t) => t.id === themeId);
   if (!theme || theme.subthemes.length === 0) {
-    return { digest, themeId, subthemeId: null, classifiedFrom: document };
+    return { ...base, themeId, subthemeId: null, suggestion: null };
   }
 
   const allSubs = buildSubthemeOptions(theme);
@@ -217,7 +288,7 @@ export async function analyseBookmark(
   const subOptions = docVector
     ? shortlist(allSubs, docVector, await optionVectors(run, allSubs, subExamples, "s"), SHORTLIST_SIZE)
     : allSubs;
-  const subthemeId = await choose(
+  const sub = await choose(
     subOptions,
     document,
     `Aucun sous-thème précis, laisser dans « ${theme.name} »`,
@@ -226,5 +297,5 @@ export async function analyseBookmark(
     subExamples,
   );
 
-  return { digest, themeId, subthemeId, classifiedFrom: document };
+  return { ...base, themeId, subthemeId: sub.id, suggestion: null };
 }

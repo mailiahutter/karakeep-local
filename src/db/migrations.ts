@@ -402,4 +402,41 @@ export const MIGRATIONS: string[] = [
   );
   CREATE INDEX idx_highlights_bookmark ON highlights(bookmark_id, position);
   `,
+
+  // 013 — version 3.1 : le design « Tiroirs » validé au tour 2.
+  //
+  // - `ai_confidence` et `ai_alternatives` : la certitude réelle du modèle
+  //   sur le tiroir retenu, et les autres tiroirs envisagés. C'est elle qui
+  //   décide de ce que l'utilisateur doit vérifier le matin.
+  // - `theme_suggestion` : le tiroir que l'IA propose de créer quand aucun ne
+  //   convient (JSON : nom, emoji, description).
+  // - `verified_at` : vérifié par l'utilisateur — ne plus le lui reproposer.
+  // - `themes.cover_bookmark_id` : la photo de couverture choisie pour un
+  //   tiroir ; sans choix, celle de l'idée la plus récente.
+  // - `reminders` : « jette un œil à cette idée tel jour à telle heure ».
+  //
+  // Les rangements faits par l'IA avant cette version n'ont pas de certitude
+  // mesurée : ils repassent une fois au modèle pour l'obtenir.
+  `
+  ALTER TABLE bookmarks ADD COLUMN ai_confidence REAL;
+  ALTER TABLE bookmarks ADD COLUMN ai_alternatives TEXT;
+  ALTER TABLE bookmarks ADD COLUMN theme_suggestion TEXT;
+  ALTER TABLE bookmarks ADD COLUMN verified_at INTEGER;
+  ALTER TABLE themes ADD COLUMN cover_bookmark_id TEXT;
+
+  CREATE TABLE reminders (
+    id              TEXT PRIMARY KEY NOT NULL,
+    bookmark_id     TEXT NOT NULL REFERENCES bookmarks(id) ON DELETE CASCADE,
+    due_at          INTEGER NOT NULL,
+    notification_id TEXT,
+    done            INTEGER NOT NULL DEFAULT 0,
+    created_at      INTEGER NOT NULL
+  );
+  CREATE INDEX idx_reminders_due ON reminders(done, due_at);
+
+  UPDATE bookmarks SET ai_status = 'pending'
+   WHERE archived = 0
+     AND ai_status = 'success'
+     AND (theme_source IS NULL OR theme_source <> 'human');
+  `,
 ];

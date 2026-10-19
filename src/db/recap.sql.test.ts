@@ -29,6 +29,6 @@ test("la phrase de bilan se tait quand rien n'a changé", () => {
   assert.equal(recapSentence({ filed: 0, unfiled: 0, gone: 0, remaining: 3 }), null);
   assert.equal(
     recapSentence({ filed: 12, unfiled: 0, gone: 0, remaining: 0 }),
-    "Pendant ton absence : 12 liens rangés · tout est à jour",
+    "Depuis ta dernière visite : 12 liens rangés · tout est à jour",
   );
 });

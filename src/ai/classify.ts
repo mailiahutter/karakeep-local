@@ -249,3 +249,62 @@ export function shortlist(
     .filter((o) => kept.has(o.id))
     .map((o, i) => ({ ...o, index: i + 1 }));
 }
+
+// --- Proposer un tiroir --------------------------------------------------
+
+/** Tiroir proposé quand aucun ne convient : à accepter ou modifier. */
+export interface ThemeSuggestion {
+  name: string;
+  emoji: string;
+  description: string;
+}
+
+export const SUGGEST_SYSTEM_PROMPT =
+  "Tu proposes des catégories de rangement courtes et générales. Tu réponds en JSON.";
+
+export const SUGGEST_JSON_SCHEMA = {
+  type: "object",
+  properties: {
+    name: { type: "string" },
+    emoji: { type: "string" },
+    description: { type: "string" },
+  },
+  required: ["name", "emoji", "description"],
+};
+
+export function buildSuggestPrompt(document: string, existing: string[]): string {
+  return `Ce lien ne rentre dans aucune des catégories existantes : ${existing.join(", ") || "aucune"}.
+
+<LIEN>
+${document}
+</LIEN>
+
+Propose UNE nouvelle catégorie assez large pour accueillir d'autres liens du même genre plus tard — pas un intitulé taillé pour ce seul lien.
+- name : un à trois mots, en français, avec une majuscule ;
+- emoji : un seul emoji qui l'illustre ;
+- description : une phrase qui dit ce qu'on y range.`;
+}
+
+/** Un emoji, pas une phrase : on garde le premier graphème non alphabétique. */
+function firstEmoji(raw: string): string {
+  const match = raw.match(/\p{Extended_Pictographic}(?:️|‍\p{Extended_Pictographic})*/u);
+  return match ? match[0] : "📁";
+}
+
+export function parseSuggestion(raw: string): ThemeSuggestion | null {
+  try {
+    const start = raw.indexOf("{");
+    const end = raw.lastIndexOf("}");
+    if (start < 0 || end <= start) return null;
+    const o = JSON.parse(raw.slice(start, end + 1)) as Record<string, unknown>;
+    const name = typeof o.name === "string" ? o.name.replace(/\s+/g, " ").trim() : "";
+    if (name.length < 2 || name.length > 40) return null;
+    return {
+      name: name.charAt(0).toUpperCase() + name.slice(1),
+      emoji: firstEmoji(typeof o.emoji === "string" ? o.emoji : ""),
+      description: typeof o.description === "string" ? o.description.trim().slice(0, 200) : "",
+    };
+  } catch {
+    return null;
+  }
+}

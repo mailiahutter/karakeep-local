@@ -2,60 +2,64 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import {
-  FlatList,
+  Image,
   Pressable,
   RefreshControl,
+  ScrollView,
   StyleSheet,
   Text,
   View,
 } from "react-native";
 
-import { listBookmarks, setFavourite } from "../../src/db/bookmarks";
-import type { Bookmark } from "../../src/db/types";
+import { countDoubts, listDrawers, type Drawer } from "../../src/db/verify";
+import { getDb } from "../../src/db/client";
 import { processPending, subscribe } from "../../src/pipeline/queue";
-import { BookmarkCard } from "../../src/ui/BookmarkCard";
-import { EmptyState } from "../../src/ui/components";
 import { QueueBanner } from "../../src/ui/QueueBanner";
-import { ReviewBanner } from "../../src/ui/ReviewBanner";
 import { RecapBanner } from "../../src/ui/RecapBanner";
-import { notifyBookmarksChanged, useBookmarksRevision } from "../../src/ui/events";
+import { ThemeIcon } from "../../src/ui/ThemeIcon";
+import { useBookmarksRevision } from "../../src/ui/events";
+import { previousVisit } from "../../src/ui/lastVisit";
 import { radius, spacing, useTheme } from "../../src/ui/theme";
 
-type Filter = "all" | "favourites" | "archived";
-
-export default function BookmarksScreen() {
+/**
+ * Accueil « Mes tiroirs », validé au tour 2.
+ *
+ * Le matin : en haut, seulement ce dont l'IA doute ; en dessous, une commode
+ * — un tiroir par thème, avec sa photo de couverture, son nombre d'idées, et
+ * un badge pour ce qui est arrivé depuis la dernière visite.
+ */
+export default function DrawersScreen() {
   const t = useTheme();
   const router = useRouter();
   const revision = useBookmarksRevision();
-
-  const [filter, setFilter] = useState<Filter>("all");
-  const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [drawers, setDrawers] = useState<Drawer[]>([]);
+  const [doubts, setDoubts] = useState(0);
+  const [unsorted, setUnsorted] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
-    const rows = await listBookmarks({
-      archived: filter === "archived",
-      favourited: filter === "favourites" ? true : undefined,
-      limit: 200,
-    });
-    setBookmarks(rows);
-    setLoading(false);
-  }, [filter]);
+    const { at } = await previousVisit();
+    const [d, n] = await Promise.all([listDrawers(at), countDoubts()]);
+    const db = await getDb();
+    const row = await db.getFirstAsync<{ n: number }>(
+      "SELECT COUNT(*) AS n FROM bookmarks WHERE archived = 0 AND theme_id IS NULL AND verified_at IS NOT NULL",
+    );
+    setDrawers(d);
+    setDoubts(n);
+    setUnsorted(row?.n ?? 0);
+  }, []);
 
   useEffect(() => {
     void load();
   }, [load, revision]);
 
-  // La file d'arrière-plan enrichit les favoris après coup : la liste doit
-  // refléter titres et tags dès qu'ils arrivent.
-  useEffect(() => {
-    return subscribe((event) => {
-      if (event.type === "bookmark-updated" || event.type === "idle") {
-        void load();
-      }
-    });
-  }, [load]);
+  useEffect(
+    () =>
+      subscribe((event) => {
+        if (event.type === "bookmark-updated" || event.type === "idle") void load();
+      }),
+    [load],
+  );
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -67,95 +71,100 @@ export default function BookmarksScreen() {
     }
   }, [load]);
 
-  const toggleFavourite = useCallback(async (bookmark: Bookmark) => {
-    await setFavourite(bookmark.id, !bookmark.favourited);
-    notifyBookmarksChanged();
-  }, []);
-
-  const emptyMessage: Record<Filter, { title: string; message: string }> = {
-    all: {
-      title: "Aucun favori",
-      message:
-        "Partage un lien depuis ton navigateur vers Karakeep Local, ou ajoute-le avec le bouton +.",
-    },
-    favourites: {
-      title: "Aucun favori marqué",
-      message: "Touche l'étoile sur une fiche pour la retrouver ici.",
-    },
-    archived: {
-      title: "Rien d'archivé",
-      message: "Les liens archivés disparaissent de la liste principale.",
-    },
-  };
-
   return (
     <View style={[styles.container, { backgroundColor: t.bg }]}>
-      <View style={styles.filters}>
-        {(
-          [
-            ["all", "Tous"],
-            ["favourites", "Favoris"],
-            ["archived", "Archivés"],
-          ] as const
-        ).map(([value, label]) => {
-          const active = filter === value;
-          return (
+      <ScrollView
+        contentContainerStyle={styles.content}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={t.accent} />
+        }
+      >
+        {doubts > 0 ? (
+          <Pressable
+            onPress={() => router.push("/verify")}
+            accessibilityRole="button"
+            style={({ pressed }) => [
+              styles.banner,
+              { backgroundColor: t.accent, opacity: pressed ? 0.85 : 1 },
+            ]}
+          >
+            <Text style={[styles.bannerCount, { color: t.accentText }]}>{doubts}</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.bannerTitle, { color: t.accentText }]}>
+                {doubts > 1 ? "rangements à vérifier" : "rangement à vérifier"}
+              </Text>
+              <Text style={[styles.bannerHint, { color: t.accentText }]}>
+                L'IA hésite. Un toucher suffit pour chacun.
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={t.accentText} />
+          </Pressable>
+        ) : (
+          <View style={[styles.banner, { backgroundColor: t.surface, borderColor: t.border, borderWidth: 1 }]}>
+            <Text style={[styles.bannerCount, { color: t.success }]}>✓</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.bannerTitle, { color: t.text }]}>Tout est rangé</Text>
+              <Text style={[styles.bannerHint, { color: t.textMuted }]}>Rien à vérifier pour l'instant.</Text>
+            </View>
+          </View>
+        )}
+
+        <RecapBanner />
+        <QueueBanner />
+
+        <View style={styles.grid}>
+          {drawers.map((d) => (
             <Pressable
-              key={value}
-              onPress={() => setFilter(value)}
-              style={[
-                styles.filter,
-                {
-                  backgroundColor: active ? t.accent : t.surface,
-                  borderColor: active ? t.accent : t.border,
-                },
+              key={d.id}
+              onPress={() => router.push({ pathname: "/theme/[id]", params: { id: d.id, title: d.name } })}
+              accessibilityRole="button"
+              accessibilityLabel={`${d.name}, ${d.count} idées`}
+              style={({ pressed }) => [
+                styles.drawer,
+                { backgroundColor: t.surface, borderColor: t.border, opacity: pressed ? 0.8 : 1 },
               ]}
             >
-              <Text
-                style={[
-                  styles.filterLabel,
-                  { color: active ? t.accentText : t.textMuted },
-                ]}
-              >
-                {label}
-              </Text>
+              <View style={[styles.cover, { backgroundColor: t.surfaceAlt }]}>
+                {d.cover ? (
+                  <Image source={{ uri: d.cover }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+                ) : (
+                  <ThemeIcon icon={d.icon} size={40} color={t.textFaint} />
+                )}
+                {d.fresh > 0 && (
+                  <View style={[styles.fresh, { backgroundColor: t.accent }]}>
+                    <Text style={{ color: t.accentText, fontSize: 12, fontWeight: "700" }}>+{d.fresh}</Text>
+                  </View>
+                )}
+              </View>
+              <View style={styles.label}>
+                <ThemeIcon icon={d.icon} size={15} color={t.accent} />
+                <Text style={[styles.name, { color: t.text }]} numberOfLines={1}>
+                  {d.name}
+                </Text>
+                <Text style={[styles.count, { color: t.textFaint }]}>{d.count}</Text>
+              </View>
             </Pressable>
-          );
-        })}
-      </View>
+          ))}
+          {unsorted > 0 && (
+            <Pressable
+              onPress={() => router.push("/list")}
+              style={[styles.drawer, { backgroundColor: t.surface, borderColor: t.border }]}
+            >
+              <View style={[styles.cover, { backgroundColor: t.surfaceAlt }]}>
+                <Text style={{ fontSize: 36 }}>📥</Text>
+              </View>
+              <View style={styles.label}>
+                <Text style={[styles.name, { color: t.text }]}>À trier</Text>
+                <Text style={[styles.count, { color: t.textFaint }]}>{unsorted}</Text>
+              </View>
+            </Pressable>
+          )}
+        </View>
 
-      <RecapBanner />
-      <QueueBanner />
-      <ReviewBanner />
-
-      <FlatList
-        data={bookmarks}
-        keyExtractor={(b) => b.id}
-        contentContainerStyle={styles.list}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor={t.accent}
-          />
-        }
-        renderItem={({ item }) => (
-          <BookmarkCard
-            bookmark={item}
-            onPress={() => router.push(`/bookmark/${item.id}`)}
-            onToggleFavourite={() => void toggleFavourite(item)}
-          />
-        )}
-        ListEmptyComponent={
-          loading ? null : (
-            <EmptyState
-              icon="bookmark-outline"
-              title={emptyMessage[filter].title}
-              message={emptyMessage[filter].message}
-            />
-          )
-        }
-      />
+        <Pressable onPress={() => router.push("/list")} style={styles.all}>
+          <Text style={{ color: t.accent, fontWeight: "600" }}>Toutes les idées, en liste</Text>
+        </Pressable>
+      </ScrollView>
 
       <Pressable
         onPress={() => router.push("/add")}
@@ -171,27 +180,45 @@ export default function BookmarksScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  filters: {
+  content: { padding: spacing.lg, paddingBottom: 110 },
+  banner: {
     flexDirection: "row",
-    gap: spacing.sm,
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
+    alignItems: "center",
+    gap: spacing.md,
+    padding: spacing.lg,
+    borderRadius: radius.lg,
+    marginBottom: spacing.md,
   },
-  filter: {
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.lg,
-    borderRadius: 999,
+  bannerCount: { fontSize: 26, fontWeight: "800", minWidth: 30, textAlign: "center" },
+  bannerTitle: { fontSize: 15, fontWeight: "700" },
+  bannerHint: { fontSize: 12.5, opacity: 0.9, marginTop: 2 },
+  grid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.md },
+  drawer: {
+    width: "48%",
+    borderRadius: radius.lg,
     borderWidth: 1,
+    overflow: "hidden",
   },
-  filterLabel: { fontSize: 13, fontWeight: "600" },
-  list: { padding: spacing.lg, gap: spacing.md, paddingBottom: 96 },
+  cover: { aspectRatio: 4 / 3, alignItems: "center", justifyContent: "center" },
+  fresh: {
+    position: "absolute",
+    top: spacing.sm,
+    right: spacing.sm,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    borderRadius: 999,
+  },
+  label: { flexDirection: "row", alignItems: "center", gap: spacing.xs, padding: spacing.md },
+  name: { flex: 1, fontSize: 14, fontWeight: "700" },
+  count: { fontSize: 13 },
+  all: { alignSelf: "center", padding: spacing.lg },
   fab: {
     position: "absolute",
     right: spacing.xl,
     bottom: spacing.xl,
     width: 58,
     height: 58,
-    borderRadius: radius.lg + 15,
+    borderRadius: 29,
     alignItems: "center",
     justifyContent: "center",
     elevation: 5,

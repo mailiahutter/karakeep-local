@@ -37,6 +37,7 @@ import { listClassificationExamples } from "../db/examples";
 import { withOcr } from "../archive/ocrText";
 import { ensureOcr } from "./ocr";
 import { refreshYtdlpWeekly } from "./ytdlpUpdate";
+import { saveClassificationMeta } from "../db/verify";
 import { embed, embedCached, ensureEmbedderDownloaded } from "../ai/embed";
 
 /**
@@ -258,6 +259,13 @@ async function runTagStage(deadline: () => boolean): Promise<number> {
           "ai",
         );
       }
+      // La certitude décide de ce qui sera montré le matin : sans elle, tout
+      // serait soit à vérifier, soit invisible.
+      await saveClassificationMeta(bookmark.id, {
+        confidence: analysis.confidence,
+        alternatives: analysis.alternatives,
+        suggestion: analysis.suggestion,
+      });
       emit({ type: "bookmark-updated", bookmarkId: bookmark.id });
 
       await beat();

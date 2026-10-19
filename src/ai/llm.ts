@@ -124,7 +124,25 @@ export interface CompletionOptions {
   timeoutMs?: number;
   /** Nombre de jetons produits, pour donner signe de vie à l'interface. */
   onToken?: (produced: number) => void;
+  /**
+   * Demande au moteur les probabilités des `nProbs` jetons les plus probables
+   * à chaque position. C'est la certitude réelle du modèle, pas une
+   * auto-évaluation qu'il inventerait.
+   */
+  nProbs?: number;
+  onProbabilities?: (probs: TokenProbs[]) => void;
 }
+
+export interface TokenProbs {
+  content: string;
+  probs: { tok_str: string; prob: number }[];
+}
+
+type RawResult = {
+  content?: string;
+  text?: string;
+  completion_probabilities?: TokenProbs[];
+};
 
 /** Le modèle n'a rien produit dans le temps imparti. */
 export class InferenceTimeoutError extends Error {
@@ -181,6 +199,7 @@ export async function complete(
         // Température basse : le tagging doit être stable d'une exécution à l'autre.
         temperature: 0.2,
         top_p: 0.9,
+        ...(options.nProbs ? { n_probs: options.nProbs } : {}),
         ...(options.jsonSchema
           ? {
               response_format: {
@@ -198,14 +217,16 @@ export async function complete(
 
     const budget = options.timeoutMs;
     if (budget === undefined) {
-      const result = await run;
+      const result = (await run) as RawResult;
+      if (result.completion_probabilities) options.onProbabilities?.(result.completion_probabilities);
       return result.content || result.text || "";
     }
 
     // Le délai écoulé, on demande l'arrêt puis on récupère ce qui a été
     // produit : sur une réponse d'un seul nombre, le début suffit souvent.
     // Rejeter sans attendre laisserait l'inférence tourner en fond.
-    const outcome = await raceStop(run, budget, ctx);
+    const outcome = await raceStop(run as Promise<RawResult>, budget, ctx);
+    if (outcome.probs) options.onProbabilities?.(outcome.probs);
     // Une vraie erreur du moteur ne doit pas être maquillée en dépassement de
     // délai : le message reçu est la seule piste dont dispose l'utilisateur.
     if (outcome.error) throw outcome.error;
@@ -243,15 +264,19 @@ async function withTimeout<T>(
  * `error` porte un échec réel du moteur, à distinguer d'un simple dépassement.
  */
 async function raceStop(
-  run: Promise<{ content?: string; text?: string }>,
+  run: Promise<RawResult>,
   ms: number,
   ctx: LlamaContext,
-): Promise<{ text: string | null; error: Error | null }> {
+): Promise<{ text: string | null; error: Error | null; probs: TokenProbs[] | null }> {
   let failure: Error | null = null;
+  let probs: TokenProbs[] | null = null;
   // La promesse est neutralisée pour qu'un rejet tardif, après l'expiration,
   // ne remonte jamais comme rejet non traité.
   const settled: Promise<string | null> = run.then(
-    (r) => r.content || r.text || "",
+    (r) => {
+      probs = r.completion_probabilities ?? null;
+      return r.content || r.text || "";
+    },
     (err) => {
       failure = err instanceof Error ? err : new Error(String(err));
       return null;
@@ -266,7 +291,7 @@ async function raceStop(
   try {
     const first = await Promise.race([settled, expired]);
     if (first !== "expired") {
-      return { text: first, error: failure };
+      return { text: first, error: failure, probs };
     }
 
     await ctx.stopCompletion().catch(() => {});
@@ -275,6 +300,7 @@ async function raceStop(
     return {
       text: partial && partial.trim().length > 0 ? partial : null,
       error: failure,
+      probs,
     };
   } finally {
     if (timer) clearTimeout(timer);

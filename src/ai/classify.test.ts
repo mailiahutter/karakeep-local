@@ -201,3 +201,14 @@ test("une catégorie sans vecteur n'est jamais écartée", () => {
   assert.ok(kept.some((o) => o.id === "t-y"));
   assert.ok(kept.some((o) => o.id === "t-moto"));
 });
+
+test("la proposition de tiroir est lue et nettoyée", async () => {
+  const { parseSuggestion } = await import("./classify.ts");
+  assert.deepEqual(
+    parseSuggestion('Voici : {"name": "course à pied", "emoji": "🏃 sport", "description": "Entraînements et courses."}'),
+    { name: "Course à pied", emoji: "🏃", description: "Entraînements et courses." },
+  );
+  assert.equal(parseSuggestion("pas de json"), null);
+  assert.equal(parseSuggestion('{"name": "", "emoji": "x", "description": ""}'), null);
+  assert.equal(parseSuggestion('{"name": "Jardin", "emoji": "", "description": ""}')?.emoji, "📁");
+});

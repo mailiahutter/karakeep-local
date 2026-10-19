@@ -511,8 +511,10 @@ async function downloadGuessed(
       if (await downloadAsset(bookmarkId, "video", video.url, 200 * 1024 * 1024)) outcome.videos++;
     }
     if (outcome.videos === 0 && kind === "youtube") {
-      // Une vidéo pèse vite des centaines de mégaoctets : en Wi-Fi seulement.
-      if (hasMediaTools() && (await connectionKind()) === "wifi") {
+      // Choix de l'utilisateur au tour 2 : les vidéos se téléchargent tout de
+      // suite, même en 4G — la nuit, le téléphone est en mode avion. Le
+      // plafond de 720p et de 300 Mo (voir MediaTools.kt) borne le coût.
+      if (hasMediaTools() && (await connectionKind()) !== "none") {
         try {
           const ran = await runYtdlp(bookmarkId, url);
           const videosOnly = ran?.summary.media.filter((m) => m.type === "video") ?? [];

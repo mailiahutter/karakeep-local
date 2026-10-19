@@ -21,6 +21,13 @@ import {
   type Settings,
 } from "../../src/db/settings";
 import { listTags } from "../../src/db/tags";
+import {
+  countBelow,
+  getAutoAdjust,
+  getThreshold,
+  setAutoAdjust,
+  setThreshold,
+} from "../../src/db/verify";
 import { Card, Row, SectionTitle } from "../../src/ui/components";
 import { currentBuild, currentVersion, releasesUrl } from "../../src/update/updater";
 import { spacing, useTheme } from "../../src/ui/theme";
@@ -117,8 +124,8 @@ export default function SettingsScreen() {
 
           <NavRow
             icon="albums-outline"
-            label="Thèmes et sous-thèmes"
-            hint="Les tiroirs où le modèle range les liens, et la consigne qu'il lit pour décider."
+            label="Mes tiroirs"
+            hint="Créer, renommer, choisir n'importe quel emoji, expliquer à l'IA ce qui va dedans."
             onPress={() => router.push("/settings/themes")}
           />
 
@@ -143,12 +150,6 @@ export default function SettingsScreen() {
             onChange={(v) => void update("autoTag", v)}
           />
           <ToggleRow
-            label="Proposer la relecture à l'ouverture"
-            hint="Récapitule ce que le modèle a proposé pour que tu dises si c'est juste."
-            value={settings.reviewOnLaunch}
-            onChange={(v) => void update("reviewOnLaunch", v)}
-          />
-          <ToggleRow
             label="Lire le contenu des pages"
             hint="Télécharge et extrait le texte pour la recherche plein texte."
             value={settings.autoFetch}
@@ -156,6 +157,8 @@ export default function SettingsScreen() {
           />
         </Card>
       </View>
+
+      <VerificationCard />
 
       <View>
         <SectionTitle>Bibliothèque</SectionTitle>
@@ -215,6 +218,71 @@ export default function SettingsScreen() {
         </Text>
       </View>
     </ScrollView>
+  );
+}
+
+/**
+ * Le seuil de vérification : une idée rangée avec moins de certitude est
+ * montrée dans « À vérifier ». Il s'ajuste seul avec les corrections.
+ */
+function VerificationCard() {
+  const t = useTheme();
+  const [threshold, setT] = useState<number | null>(null);
+  const [auto, setAuto] = useState(true);
+  const [below, setBelow] = useState(0);
+
+  const refresh = useCallback(async () => {
+    const value = await getThreshold();
+    setT(value);
+    setAuto(await getAutoAdjust());
+    setBelow(await countBelow(value));
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      void refresh();
+    }, [refresh]),
+  );
+
+  if (threshold === null) return null;
+  const pct = Math.round(threshold * 100);
+  const step = (delta: number) => {
+    const next = Math.min(0.95, Math.max(0.4, Math.round((threshold + delta) * 100) / 100));
+    void setThreshold(next).then(refresh);
+  };
+
+  return (
+    <View>
+      <SectionTitle>Vérification</SectionTitle>
+      <Card>
+        <Row style={styles.between}>
+          <View style={styles.grow}>
+            <Text style={[styles.label, { color: t.text }]}>Me montrer seulement les doutes</Text>
+            <Text style={[styles.hint, { color: t.textMuted }]}>
+              Une idée rangée avec moins de {pct} % de certitude te sera montrée. Avec ce seuil,{" "}
+              {below} idée{below > 1 ? "s" : ""} {below > 1 ? "sont" : "est"} à vérifier.
+            </Text>
+          </View>
+        </Row>
+        <Row style={{ justifyContent: "center", gap: spacing.lg }}>
+          <Pressable onPress={() => step(-0.05)} accessibilityLabel="Baisser le seuil" hitSlop={10}>
+            <Ionicons name="remove-circle-outline" size={30} color={t.accent} />
+          </Pressable>
+          <Text style={{ color: t.text, fontSize: 22, fontWeight: "800", minWidth: 70, textAlign: "center" }}>
+            {pct} %
+          </Text>
+          <Pressable onPress={() => step(0.05)} accessibilityLabel="Monter le seuil" hitSlop={10}>
+            <Ionicons name="add-circle-outline" size={30} color={t.accent} />
+          </Pressable>
+        </Row>
+        <ToggleRow
+          label="Ajuster le seuil tout seul"
+          hint="Si tu corriges des rangements jugés sûrs, le seuil monte. Si tu valides les doutes sans rien changer, il descend."
+          value={auto}
+          onChange={(v) => void setAutoAdjust(v).then(refresh)}
+        />
+      </Card>
+    </View>
   );
 }
 

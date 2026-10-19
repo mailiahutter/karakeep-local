@@ -25,5 +25,5 @@ export function recapSentence(a: {
   if (a.gone > 0) parts.push(`${a.gone} source${a.gone > 1 ? "s" : ""} disparue${a.gone > 1 ? "s" : ""} (sauvegarde conservée)`);
   if (parts.length === 0) return null;
   const tail = a.remaining > 0 ? ` · ${a.remaining} encore en file` : " · tout est à jour";
-  return `Pendant ton absence : ${parts.join(" · ")}${tail}`;
+  return `Depuis ta dernière visite : ${parts.join(" · ")}${tail}`;
 }

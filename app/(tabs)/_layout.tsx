@@ -24,9 +24,10 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: "Favoris",
+          title: "Mes tiroirs",
+          tabBarLabel: "Tiroirs",
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="bookmark-outline" color={color} size={size} />
+            <Ionicons name="file-tray-stacked-outline" color={color} size={size} />
           ),
         }}
       />
@@ -34,6 +35,9 @@ export default function TabsLayout() {
         name="themes"
         options={{
           title: "Thèmes",
+          // Remplacé par les tiroirs de l'accueil ; la gestion des thèmes
+          // reste dans Réglages → Mes tiroirs.
+          href: null,
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="albums-outline" color={color} size={size} />
           ),
@@ -42,7 +46,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="search"
         options={{
-          title: "Recherche",
+          title: "Rechercher",
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="search-outline" color={color} size={size} />
           ),
@@ -52,6 +56,8 @@ export default function TabsLayout() {
         name="tags"
         options={{
           title: "Tags",
+          // Les tags ne servent qu'à l'IA : plus d'onglet pour eux.
+          href: null,
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="pricetags-outline" color={color} size={size} />
           ),

@@ -80,6 +80,7 @@ object MediaTools {
       .addOption("--no-simulate")
       .addOption("-j")
       .addOption("--no-playlist-reverse")
+      .addOption("--max-filesize", "300M")
       .addOption("--socket-timeout", 30)
       .addOption("--retries", 3)
     val response = YoutubeDL.getInstance().execute(request, null, null)

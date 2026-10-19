@@ -49,7 +49,10 @@ export default function RootLayout() {
             options={{ title: "Ajouter un lien", presentation: "modal" }}
           />
           <Stack.Screen name="settings/model" options={{ title: "Modèle IA" }} />
-          <Stack.Screen name="theme/[id]" options={{ title: "Thème" }} />
+          <Stack.Screen name="theme/[id]" options={{ title: "Tiroir" }} />
+          <Stack.Screen name="verify" options={{ title: "À vérifier" }} />
+          <Stack.Screen name="filed" options={{ title: "Rangé sans toi" }} />
+          <Stack.Screen name="list" options={{ title: "Toutes les idées" }} />
           <Stack.Screen
             name="settings/themes"
             options={{ title: "Thèmes et sous-thèmes" }}
