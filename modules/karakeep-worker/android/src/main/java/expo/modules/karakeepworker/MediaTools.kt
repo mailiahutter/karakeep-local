@@ -9,6 +9,9 @@ import com.yausername.ffmpeg.FFmpeg
 import com.yausername.youtubedl_android.YoutubeDL
 import com.yausername.youtubedl_android.YoutubeDLRequest
 import java.io.File
+import java.io.FileOutputStream
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
@@ -105,5 +108,49 @@ object MediaTools {
   fun version(context: Context): String? {
     ensureYtdlp(context)
     return YoutubeDL.getInstance().versionName(context)
+  }
+
+  /**
+   * Archive ZIP de fichiers et de dossiers, écrite en flux : une sauvegarde
+   * peut peser plusieurs gigaoctets de vidéos, rien ne doit tenir en mémoire.
+   * Les médias sont déjà compressés : on les range sans les recompresser.
+   */
+  fun zip(sources: List<String>, dest: String): Map<String, Any> {
+    val out = File(dest.removePrefix("file://"))
+    out.parentFile?.mkdirs()
+    var files = 0
+    var bytes = 0L
+    ZipOutputStream(FileOutputStream(out).buffered(1 shl 16)).use { zip ->
+      for (raw in sources) {
+        val root = File(raw.removePrefix("file://"))
+        if (!root.exists()) continue
+        val base = root.parentFile ?: root
+        root.walkTopDown().filter { it.isFile }.forEach { file ->
+          val entry = ZipEntry(file.relativeTo(base).path)
+          val stored = !file.name.endsWith(".db") && !file.name.endsWith(".html")
+          if (stored) {
+            entry.method = ZipEntry.STORED
+            entry.size = file.length()
+            entry.compressedSize = file.length()
+            entry.crc = java.util.zip.CRC32().also { crc ->
+              file.inputStream().buffered(1 shl 16).use { input ->
+                val buf = ByteArray(1 shl 16)
+                while (true) {
+                  val n = input.read(buf)
+                  if (n < 0) break
+                  crc.update(buf, 0, n)
+                }
+              }
+            }.value
+          }
+          zip.putNextEntry(entry)
+          file.inputStream().buffered(1 shl 16).use { it.copyTo(zip, 1 shl 16) }
+          zip.closeEntry()
+          files++
+          bytes += file.length()
+        }
+      }
+    }
+    return mapOf("path" to out.absolutePath, "files" to files, "bytes" to bytes.toDouble(), "size" to out.length().toDouble())
   }
 }

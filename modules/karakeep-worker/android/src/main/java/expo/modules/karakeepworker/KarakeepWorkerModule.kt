@@ -102,6 +102,13 @@ class KarakeepWorkerModule : Module() {
       }
     }
 
+    /** Archive ZIP pour la sauvegarde. */
+    AsyncFunction("zip") { sources: List<String>, dest: String, promise: Promise ->
+      MediaTools.background({ MediaTools.zip(sources, dest) }) { r ->
+        r.fold({ promise.resolve(it) }, { promise.reject("ERR_ZIP", it.message ?: "Archive impossible", it) })
+      }
+    }
+
     /** Fenêtre programmée, ou `null` s'il n'y en a pas. */
     Function("scheduledWindow") {
       Preferences.readWindow(context)

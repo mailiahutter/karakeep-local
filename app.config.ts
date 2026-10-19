@@ -95,6 +95,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     // Réveille l'application via WorkManager pour reprendre la file IA
     // quand elle est fermée.
     "expo-background-task",
+    // Rappels « jette un œil à cette idée » programmés auprès d'Android.
+    "expo-notifications",
     "./plugins/withAndroidTweaks",
   ],
   extra: {

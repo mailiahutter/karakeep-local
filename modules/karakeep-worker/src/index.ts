@@ -19,6 +19,7 @@ interface KarakeepWorkerNative {
   ytdlpDownload(url: string, dir: string): Promise<{ files: string[]; info: string }>;
   ytdlpUpdate(): Promise<string>;
   ytdlpVersion(): Promise<string | null>;
+  zip(sources: string[], dest: string): Promise<{ path: string; files: number; bytes: number; size: number }>;
 }
 
 export interface WorkerDiagnostics {
@@ -131,4 +132,13 @@ export async function ytdlpVersion(): Promise<string | null> {
   } catch {
     return null;
   }
+}
+
+/** Archive ZIP (sauvegarde). Lève une erreur si le module natif manque. */
+export async function zipFiles(
+  sources: string[],
+  dest: string,
+): Promise<{ path: string; files: number; bytes: number; size: number }> {
+  if (typeof native?.zip !== "function") throw new Error("Sauvegarde indisponible dans cette version");
+  return native.zip(sources, dest);
 }

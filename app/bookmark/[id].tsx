@@ -23,8 +23,11 @@ import {
 import { listAssets, type Asset } from "../../src/db/assets";
 import { AssetViewer } from "../../src/ui/AssetViewer";
 import { HighlightableContent } from "../../src/ui/HighlightableContent";
+import { ReminderSheet } from "../../src/ui/ReminderSheet";
+import { fileByUser, setDrawerCover } from "../../src/db/verify";
+import { shareIdea } from "../../src/ui/shareIdea";
 import { attachTags, detachTag } from "../../src/db/tags";
-import { assignTheme, listThemes, type Theme } from "../../src/db/themes";
+import { listThemes, type Theme } from "../../src/db/themes";
 import type { Bookmark } from "../../src/db/types";
 import { hostLabel } from "../../src/db/urls";
 import { aiWaitLabel } from "../../src/pipeline/policy";
@@ -52,6 +55,7 @@ export default function BookmarkScreen() {
   const [assets, setAssets] = useState<Asset[]>([]);
   const [themes, setThemes] = useState<Theme[]>([]);
   const [picking, setPicking] = useState(false);
+  const [reminding, setReminding] = useState(false);
   const [queue, setQueue] = useState<QueueState>(queueState);
 
   const load = useCallback(async () => {
@@ -149,15 +153,50 @@ export default function BookmarkScreen() {
           style={styles.grow}
         />
         <Button
+          label="Partager"
+          icon="share-social-outline"
+          variant="secondary"
+          onPress={() => void shareIdea(bookmark)}
+          style={styles.grow}
+        />
+      </Row>
+      <Row style={styles.actions}>
+        <Button
           label={bookmark.favourited ? "Favori" : "Marquer"}
           icon={bookmark.favourited ? "star" : "star-outline"}
-          variant="secondary"
+          variant="ghost"
           onPress={() =>
             void mutate(() => setFavourite(bookmark.id, !bookmark.favourited))
           }
           style={styles.grow}
         />
+        <Button
+          label="Me le rappeler"
+          icon="alarm-outline"
+          variant="ghost"
+          onPress={() => setReminding(true)}
+          style={styles.grow}
+        />
+        {bookmark.themeId && bookmark.thumbnailPath && (
+          <Button
+            label="Couverture"
+            icon="image-outline"
+            variant="ghost"
+            onPress={() =>
+              void setDrawerCover(bookmark.themeId!, bookmark.id).then(() => {
+                notifyBookmarksChanged();
+                Alert.alert("Couverture choisie", "Cette photo illustre désormais le tiroir.");
+              })
+            }
+            style={styles.grow}
+          />
+        )}
       </Row>
+      <ReminderSheet
+        visible={reminding}
+        bookmark={bookmark}
+        onClose={() => setReminding(false)}
+      />
 
       {bookmark.summary && (
         <Card style={{ borderColor: t.accent }}>
@@ -219,7 +258,7 @@ export default function BookmarkScreen() {
                   <Pressable
                     onPress={() =>
                       void mutate(() =>
-                        assignTheme(bookmark.id, th.id, null, "human"),
+                        fileByUser(bookmark.id, th.id, null),
                       ).then(() => setPicking(false))
                     }
                     style={styles.pickRow}
@@ -236,7 +275,7 @@ export default function BookmarkScreen() {
                         key={sb.id}
                         onPress={() =>
                           void mutate(() =>
-                            assignTheme(bookmark.id, th.id, sb.id, "human"),
+                            fileByUser(bookmark.id, th.id, sb.id),
                           ).then(() => setPicking(false))
                         }
                         style={styles.pickRow}

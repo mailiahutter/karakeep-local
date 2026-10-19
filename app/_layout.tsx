@@ -7,6 +7,7 @@ import { useColorScheme } from "react-native";
 import { WebArchiver } from "../src/archive/WebArchiver";
 import { QueueRunner } from "../src/pipeline/QueueRunner";
 import { ShareIntentHandler } from "../src/ui/ShareIntentHandler";
+import { ReminderOpener } from "../src/ui/ReminderOpener";
 import { useTheme } from "../src/ui/theme";
 
 export default function RootLayout() {
@@ -25,6 +26,7 @@ export default function RootLayout() {
       <SafeAreaProvider>
         <StatusBar style={scheme === "dark" ? "light" : "dark"} />
         <ShareIntentHandler />
+        <ReminderOpener />
         {/* Moteur de rendu hors écran : doit rester monté pour que la file
             d'archivage soit consommée, quel que soit l'écran affiché. */}
         <WebArchiver />

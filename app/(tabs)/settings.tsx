@@ -3,6 +3,7 @@ import * as WebBrowser from "expo-web-browser";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import {
+  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -21,6 +22,7 @@ import {
   type Settings,
 } from "../../src/db/settings";
 import { listTags } from "../../src/db/tags";
+import { backupAndShare, lastBackupAt } from "../../src/pipeline/backup";
 import {
   countBelow,
   getAutoAdjust,
@@ -160,6 +162,8 @@ export default function SettingsScreen() {
 
       <VerificationCard />
 
+      <BackupCard />
+
       <View>
         <SectionTitle>Bibliothèque</SectionTitle>
         <Card>
@@ -286,6 +290,59 @@ function VerificationCard() {
   );
 }
 
+/** Sauvegarde à la demande vers Proton Drive. */
+function BackupCard() {
+  const t = useTheme();
+  const [last, setLast] = useState<number | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useFocusEffect(
+    useCallback(() => {
+      void lastBackupAt().then(setLast);
+    }, []),
+  );
+
+  const run = async () => {
+    setBusy(true);
+    try {
+      const { files, size } = await backupAndShare();
+      setLast(await lastBackupAt());
+      Alert.alert(
+        "Sauvegarde prête",
+        `${files} fichiers, ${formatBytes(size)}. Si tu as choisi Proton Drive, l'envoi continue dans son application.`,
+      );
+    } catch (err) {
+      Alert.alert("Sauvegarde impossible", (err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <View>
+      <SectionTitle>Tes données</SectionTitle>
+      <Card>
+        <Text style={[styles.label, { color: t.text }]}>Sauvegarder vers Proton Drive</Text>
+        <Text style={[styles.hint, { color: t.textMuted }]}>
+          {last
+            ? `Dernière sauvegarde : ${new Date(last).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}.`
+            : "Aucune sauvegarde pour l'instant. Si le téléphone est perdu, tout est perdu."}{" "}
+          Tes idées, tes tiroirs et toutes les photos et vidéos, dans une seule archive ; choisis Proton
+          Drive dans le menu de partage.
+        </Text>
+        <Pressable
+          onPress={() => void run()}
+          disabled={busy}
+          style={({ pressed }) => [styles.backupButton, { backgroundColor: t.accent, opacity: busy ? 0.5 : pressed ? 0.85 : 1 }]}
+        >
+          <Ionicons name="cloud-upload-outline" size={18} color={t.accentText} />
+          <Text style={{ color: t.accentText, fontWeight: "700" }}>{busy ? "Préparation…" : "Sauvegarder"}</Text>
+        </Pressable>
+      </Card>
+    </View>
+  );
+}
+
 function ToggleRow({
   label,
   hint,
@@ -368,6 +425,15 @@ const styles = StyleSheet.create({
     paddingTop: spacing.md,
     minHeight: 44,
     borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  backupButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.sm,
+    paddingVertical: spacing.md,
+    borderRadius: 12,
+    marginTop: spacing.sm,
   },
   footer: {
     fontSize: 11.5,
