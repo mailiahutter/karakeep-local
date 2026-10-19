@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
+import { createRequire } from "node:module";
 import { test } from "node:test";
+
+// Sur l'appareil, Metro fournit `require` ; ici, on le reconstitue.
+(globalThis as { require?: unknown }).require ??= createRequire(import.meta.url);
 
 import {
   absolute,

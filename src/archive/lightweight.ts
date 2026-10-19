@@ -18,6 +18,8 @@
  * réellement tester hors appareil.
  */
 
+import { extractArticle } from "./readable.ts";
+
 export interface LightPage {
   title: string | null;
   description: string | null;
@@ -231,7 +233,7 @@ export function parseLightPage(html: string, url: string): LightPage {
       metaContent(html, ["og:image:secure_url", "og:image", "twitter:image"]),
       url,
     ),
-    content: readableText(html),
+    content: extractArticle(html)?.text ?? readableText(html),
     images: collectImages(html, url),
     videos: collectVideos(html, url),
   };

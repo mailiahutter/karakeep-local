@@ -22,6 +22,7 @@ import { fetchInstagramPost } from "../archive/igApi";
 import type { IgMedia } from "../archive/igParse";
 import { noteAttempt, rankedMethods } from "../archive/igMethods";
 import { pickImages } from "../archive/images";
+import { extractArticle } from "../archive/readable";
 import { fetchPage } from "../archive/fetchPage";
 import { enqueue, isWorkerReady } from "../archive/queue";
 import type { CapturedImage, CapturedVideo } from "../archive/types";
@@ -239,6 +240,13 @@ async function gatherPage(
       const page = result.page;
       let description = page.description;
       let content = page.content;
+      // Rendu complet : l'archive autonome contient le DOM final, celui que
+      // Readability sait le mieux lire. Instagram et YouTube ont leurs propres
+      // extracteurs, plus précis.
+      if (kind === "website" && result.archiveHtml) {
+        const article = extractArticle(result.archiveHtml);
+        if (article && article.text.length > content.trim().length * 0.3) content = article.text;
+      }
       if (kind === "instagram") {
         // « 472 likes, 1 comments - … » n'est pas une légende.
         if (isStatsBoilerplate(description)) description = null;
