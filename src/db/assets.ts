@@ -99,7 +99,7 @@ export async function saveText(
   sourceUrl: string | null = null,
 ): Promise<Asset> {
   const dir = await ensureDir(bookmarkId);
-  const path = `${dir}${kind}-${Date.now()}.${EXTENSION[kind]}`;
+  const path = `${dir}${kind}-${Date.now()}-${Crypto.randomUUID().slice(0, 8)}.${EXTENSION[kind]}`;
   await FileSystem.writeAsStringAsync(path, content);
   return record(bookmarkId, kind, path, sourceUrl);
 }
@@ -112,7 +112,7 @@ export async function adoptFile(
   sourceUrl: string | null = null,
 ): Promise<Asset> {
   const dir = await ensureDir(bookmarkId);
-  const path = `${dir}${kind}-${Date.now()}.${EXTENSION[kind]}`;
+  const path = `${dir}${kind}-${Date.now()}-${Crypto.randomUUID().slice(0, 8)}.${EXTENSION[kind]}`;
   // `moveAsync` échoue entre volumes différents ; on retombe sur une copie.
   try {
     await FileSystem.moveAsync({ from: tempUri, to: path });
@@ -137,7 +137,7 @@ export async function downloadAsset(
   minBytes = 0,
 ): Promise<Asset | null> {
   const dir = await ensureDir(bookmarkId);
-  const path = `${dir}${kind}-${Date.now()}.${EXTENSION[kind]}`;
+  const path = `${dir}${kind}-${Date.now()}-${Crypto.randomUUID().slice(0, 8)}.${EXTENSION[kind]}`;
   try {
     const result = await FileSystem.downloadAsync(url, path);
     if (result.status !== 200) {

@@ -106,12 +106,12 @@ test("une page d'intégration inattendue ne fait pas échouer la capture", () =>
 });
 
 test("la méthode la plus fiable passe en premier", () => {
-  assert.deepEqual(rankMethods({}), ["api", "page"]);
-  assert.deepEqual(rankMethods({ api: { ok: 1, fail: 9 }, page: { ok: 8, fail: 2 } }), ["page", "api"]);
+  assert.deepEqual(rankMethods({}), ["api", "page", "ytdlp"]);
+  assert.deepEqual(rankMethods({ api: { ok: 1, fail: 9 }, page: { ok: 8, fail: 2 } }), ["page", "api", "ytdlp"]);
 });
 
 test("un seul échec ne fait pas basculer l'ordre", () => {
-  assert.deepEqual(rankMethods({ api: { ok: 0, fail: 1 } }), ["api", "page"]);
+  assert.deepEqual(rankMethods({ api: { ok: 0, fail: 1 } }), ["api", "page", "ytdlp"]);
 });
 
 test("l'historique ancien s'estompe", () => {

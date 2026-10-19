@@ -161,7 +161,7 @@ export function normalizePost(raw: unknown): IgPost | null {
 
 // --- Choix de la méthode -------------------------------------------------
 
-export type CaptureMethod = "api" | "page";
+export type CaptureMethod = "api" | "page" | "ytdlp";
 
 export interface MethodStats {
   ok: number;
@@ -181,11 +181,12 @@ export function rankMethods(
 ): CaptureMethod[] {
   const rate = (m: CaptureMethod) => {
     const s = stats[m] ?? { ok: 0, fail: 0 };
-    // Lissage de Laplace, avec un a priori favorable à « api ».
-    const prior = m === "api" ? 2 : 1;
+    // Lissage de Laplace, avec un a priori favorable à « api ». yt-dlp part
+    // dernier : plus lent, il télécharge tout avant de rendre la main.
+    const prior = m === "api" ? 2 : m === "page" ? 1 : 0.5;
     return (s.ok + prior) / (s.ok + s.fail + 2);
   };
-  return (["api", "page"] as CaptureMethod[]).sort((a, b) => rate(b) - rate(a));
+  return (["api", "page", "ytdlp"] as CaptureMethod[]).sort((a, b) => rate(b) - rate(a));
 }
 
 /** Met à jour les statistiques après une tentative. */

@@ -15,6 +15,10 @@ function withLargeHeap(config) {
       cfg.modResults,
     );
     application.$["android:largeHeap"] = "true";
+    // yt-dlp embarque Python sous forme de bibliothèques natives qu'il doit
+    // pouvoir lire comme des fichiers : elles doivent être extraites à
+    // l'installation, pas laissées compressées dans l'APK.
+    application.$["android:extractNativeLibs"] = "true";
     return cfg;
   });
 }
@@ -91,6 +95,34 @@ function withReleaseSigning(config) {
   });
 }
 
+/**
+ * Restreint les architectures embarquées quand le workflow le demande.
+ *
+ * llama.cpp, Python (yt-dlp) et FFmpeg livrent chacun leurs bibliothèques
+ * pour quatre processeurs : l'APK dépassait 200 Mo, dont les trois quarts
+ * inutiles sur un téléphone ARM 64 bits. `-PKARAKEEP_ABI=arm64-v8a` ne garde
+ * que celles-là ; sans la propriété, rien ne change (émulateurs, builds
+ * locaux).
+ */
+const ABI_FILTER = `
+        if (project.hasProperty('KARAKEEP_ABI')) {
+            ndk { abiFilters KARAKEEP_ABI }
+        }`;
+
+function withAbiFilter(config) {
+  return withAppBuildGradle(config, (cfg) => {
+    let contents = cfg.modResults.contents;
+    if (contents.includes("KARAKEEP_ABI")) return cfg;
+    const anchor = "defaultConfig {";
+    const idx = contents.indexOf(anchor);
+    if (idx === -1) throw new Error("withAndroidTweaks: bloc defaultConfig introuvable");
+    contents =
+      contents.slice(0, idx + anchor.length) + ABI_FILTER + contents.slice(idx + anchor.length);
+    cfg.modResults.contents = contents;
+    return cfg;
+  });
+}
+
 module.exports = function withAndroidTweaks(config) {
-  return withReleaseSigning(withLargeHeap(config));
+  return withAbiFilter(withReleaseSigning(withLargeHeap(config)));
 };

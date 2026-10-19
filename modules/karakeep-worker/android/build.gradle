@@ -26,4 +26,13 @@ dependencies {
   // d'Expo eux-mêmes le déclarent. La version vient de la substitution
   // opérée par le plugin Gradle de React Native.
   compileOnly "com.facebook.react:react-android"
+
+  // Lecture du texte dans les images. Variante « embarquée » : le modèle est
+  // dans l'APK, rien n'est téléchargé à l'usage — indispensable en mode avion.
+  implementation "com.google.mlkit:text-recognition:16.0.1"
+
+  // yt-dlp et son interpréteur Python, empaquetés pour Android (moteur de
+  // l'application Seal). FFmpeg assemble image et son des vidéos séparées.
+  implementation "io.github.junkfood02.youtubedl-android:library:0.18.1"
+  implementation "io.github.junkfood02.youtubedl-android:ffmpeg:0.18.1"
 }

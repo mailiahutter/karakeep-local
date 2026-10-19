@@ -27,6 +27,11 @@ import { enqueue, isWorkerReady } from "../archive/queue";
 import type { CapturedImage, CapturedVideo } from "../archive/types";
 import { getDb } from "../db/client";
 import { isNetworkFailure } from "./retry";
+import { summarizeYtdlp, type LocalMedia } from "../archive/ytdlpInfo";
+import { connectionKind } from "../ai/download";
+import { setOcrText } from "../db/ocr";
+import { hasMediaTools, ytdlpDownload } from "../../modules/karakeep-worker/src";
+import * as FileSystem from "expo-file-system/legacy";
 
 /**
  * Capture complète d'un lien : lecture, extraction, puis conservation des
@@ -67,6 +72,8 @@ interface Gathered {
   archiveError?: string;
   /** Médias connus exactement (API), ou à trier parmi ceux de la page. */
   exact: IgMedia[] | null;
+  /** Fichiers déjà téléchargés sur l'appareil (yt-dlp). */
+  local?: LocalMedia[];
   images: CapturedImage[];
   videos: CapturedVideo[];
   /** La page a-t-elle livré quelque chose d'exploitable ? */
@@ -125,6 +132,75 @@ async function gatherInstagramApi(url: string): Promise<Gathered | null> {
     usable: true,
     light: false,
   };
+}
+
+// --- Méthode « ytdlp » ------------------------------------------------------
+
+function ytdlpDir(bookmarkId: string): string {
+  return `${FileSystem.cacheDirectory}ytdlp/${bookmarkId}/`;
+}
+
+/**
+ * yt-dlp, le moteur de l'application Seal : il connaît plus de mille sites et
+ * suit leurs changements de près. Dernier recours pour Instagram, secours
+ * pour les autres sites, et seule voie pour les vidéos YouTube.
+ */
+async function runYtdlp(
+  bookmarkId: string,
+  url: string,
+): Promise<{ summary: ReturnType<typeof summarizeYtdlp> } | null> {
+  if (!hasMediaTools()) return null;
+  const dir = ytdlpDir(bookmarkId);
+  await FileSystem.deleteAsync(dir, { idempotent: true });
+  const result = await ytdlpDownload(url, dir.replace(/^file:\/\//, ""));
+  const summary = summarizeYtdlp(result.info, result.files);
+  return summary.media.length > 0 ? { summary } : null;
+}
+
+async function gatherYtdlp(bookmarkId: string, url: string): Promise<Gathered | null> {
+  const ran = await runYtdlp(bookmarkId, url);
+  if (!ran) return null;
+  const { summary } = ran;
+  const caption = summary.description ?? "";
+  return {
+    via: "ytdlp",
+    title:
+      summary.siteName === "Instagram"
+        ? titleFromCaption(caption, summary.author) ?? summary.title
+        : summary.title,
+    description: summary.description,
+    content: caption,
+    author: summary.author,
+    siteName: summary.siteName,
+    imageUrl: summary.thumbnail,
+    publishedAt: summary.publishedAt,
+    exact: null,
+    local: summary.media,
+    images: [],
+    videos: [],
+    usable: true,
+    light: false,
+  };
+}
+
+/** Range les fichiers produits par yt-dlp parmi les pièces du favori. */
+async function adoptLocal(
+  bookmarkId: string,
+  url: string,
+  media: LocalMedia[],
+  plan: SourcePlan,
+  outcome: CaptureOutcome,
+): Promise<void> {
+  for (const m of media.slice(0, Math.max(plan.maxImages, 1) + 2)) {
+    try {
+      await adoptFile(bookmarkId, m.type === "video" ? "video" : "image", `file://${m.path}`, url);
+      if (m.type === "video") outcome.videos++;
+      else outcome.images++;
+    } catch (err) {
+      outcome.notes.push(`Média non conservé : ${(err as Error).message}`);
+    }
+  }
+  await FileSystem.deleteAsync(ytdlpDir(bookmarkId), { idempotent: true }).catch(() => {});
 }
 
 // --- Méthode « page » ------------------------------------------------------
@@ -226,9 +302,25 @@ export async function captureBookmark(
   let fallback: Gathered | null = null;
   let lastError: Error | null = null;
 
-  const methods = kind === "instagram" ? await rankedMethods() : (["page"] as const);
+  const methods =
+    kind === "instagram" ? await rankedMethods() : (["page", "ytdlp"] as const);
   for (const method of methods) {
-    if (method === "api") {
+    if (method === "ytdlp") {
+      if (!hasMediaTools()) continue;
+      let g: Gathered | null = null;
+      try {
+        g = await gatherYtdlp(bookmarkId, url);
+      } catch (err) {
+        // Une coupure réseau constatée plus tôt reste la cause à retenir :
+        // c'est elle qui fait différer le lien plutôt que le condamner.
+        if (!lastError || !isNetworkFailure(lastError.message)) lastError = err as Error;
+      }
+      if (kind === "instagram") await noteAttempt("ytdlp", g !== null);
+      if (g) {
+        source = g;
+        break;
+      }
+    } else if (method === "api") {
       let g: Gathered | null = null;
       try {
         g = await gatherInstagramApi(url);
@@ -250,9 +342,7 @@ export async function captureBookmark(
       }
       fallback ??= gathered;
     }
-    if (kind === "instagram") {
-      notes.push(`Méthode « ${method} » sans résultat, bascule sur la suivante.`);
-    }
+    notes.push(`Méthode « ${method} » sans résultat, bascule sur la suivante.`);
   }
 
   const outcome: CaptureOutcome = {
@@ -329,14 +419,20 @@ export async function captureBookmark(
   }
 
   // --- Médias -----------------------------------------------------------
-  if (source.exact) {
+  if (source.local) {
+    await adoptLocal(bookmarkId, url, source.local, plan, outcome);
+  } else if (source.exact) {
     await downloadExact(bookmarkId, source.exact, plan, outcome);
   } else {
     await downloadGuessed(bookmarkId, url, kind, plan, source, outcome);
   }
 
   const fresh = outcome.images + outcome.videos + (outcome.screenshot ? 1 : 0) + (outcome.archive ? 1 : 0);
-  if (fresh > 0) await deleteAssets(previous);
+  if (fresh > 0) {
+    await deleteAssets(previous);
+    // Nouvelles images : leur texte sera relu avant la prochaine analyse.
+    await setOcrText(bookmarkId, null);
+  }
 
   const hasText = !!source.description || content.trim().length > 0;
   const hasMedia = outcome.images + outcome.videos > 0 ||
@@ -404,7 +500,19 @@ async function downloadGuessed(
       if (await downloadAsset(bookmarkId, "video", video.url, 200 * 1024 * 1024)) outcome.videos++;
     }
     if (outcome.videos === 0 && kind === "youtube") {
-      outcome.notes.push("Vidéo YouTube non conservée : titre, description et miniature le sont.");
+      // Une vidéo pèse vite des centaines de mégaoctets : en Wi-Fi seulement.
+      if (hasMediaTools() && (await connectionKind()) === "wifi") {
+        try {
+          const ran = await runYtdlp(bookmarkId, url);
+          const videosOnly = ran?.summary.media.filter((m) => m.type === "video") ?? [];
+          await adoptLocal(bookmarkId, url, videosOnly, plan, outcome);
+        } catch (err) {
+          outcome.notes.push(`Vidéo YouTube non conservée : ${(err as Error).message}`);
+        }
+      }
+      if (outcome.videos === 0) {
+        outcome.notes.push("Vidéo YouTube non conservée pour l'instant : titre, description et miniature le sont.");
+      }
     }
   }
 

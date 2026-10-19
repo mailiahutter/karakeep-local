@@ -4,6 +4,7 @@ import android.app.ActivityManager
 import android.content.Context
 import android.os.Build
 import android.os.PowerManager
+import expo.modules.kotlin.Promise
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 
@@ -69,6 +70,36 @@ class KarakeepWorkerModule : Module() {
         "lastAlarmResult" to last?.first,
         "lastAlarmAt" to (last?.second?.toDouble() ?: 0.0),
       )
+    }
+
+    /** Texte lu dans une image (ML Kit, hors ligne). */
+    AsyncFunction("recognizeText") { path: String, promise: Promise ->
+      val ctx = context
+      MediaTools.background({ MediaTools.recognizeText(ctx, path) }) { r ->
+        r.fold({ promise.resolve(it) }, { promise.reject("ERR_OCR", it.message ?: "Lecture impossible", it) })
+      }
+    }
+
+    /** Téléchargement par yt-dlp. */
+    AsyncFunction("ytdlpDownload") { url: String, dir: String, promise: Promise ->
+      val ctx = context
+      MediaTools.background({ MediaTools.download(ctx, url, dir) }) { r ->
+        r.fold({ promise.resolve(it) }, { promise.reject("ERR_YTDLP", it.message ?: "yt-dlp a échoué", it) })
+      }
+    }
+
+    AsyncFunction("ytdlpUpdate") { promise: Promise ->
+      val ctx = context
+      MediaTools.background({ MediaTools.update(ctx) }) { r ->
+        r.fold({ promise.resolve(it) }, { promise.reject("ERR_YTDLP", it.message ?: "Mise à jour impossible", it) })
+      }
+    }
+
+    AsyncFunction("ytdlpVersion") { promise: Promise ->
+      val ctx = context
+      MediaTools.background({ MediaTools.version(ctx) }) { r ->
+        r.fold({ promise.resolve(it) }, { promise.reject("ERR_YTDLP", it.message ?: "yt-dlp indisponible", it) })
+      }
     }
 
     /** Fenêtre programmée, ou `null` s'il n'y en a pas. */

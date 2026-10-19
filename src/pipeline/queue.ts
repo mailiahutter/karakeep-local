@@ -32,6 +32,9 @@ import {
 import { replaceAiTags } from "../db/tags";
 import { loadSettings } from "../db/settings";
 import { listClassificationExamples } from "../db/examples";
+import { withOcr } from "../archive/ocrText";
+import { ensureOcr } from "./ocr";
+import { refreshYtdlpWeekly } from "./ytdlpUpdate";
 import { embed, embedCached, ensureEmbedderDownloaded } from "../ai/embed";
 
 /**
@@ -121,6 +124,7 @@ async function runFetchStage(deadline: () => boolean): Promise<number> {
   // s'abstient, et l'étape suivante — entièrement locale — travaille quand
   // même sur ce qui est déjà extrait.
   if ((await connectionKind()) === "none") return 0;
+  await refreshYtdlpWeekly();
 
   const batch = await pendingBookmarks("fetch_status", 20);
   let done = 0;
@@ -214,7 +218,7 @@ async function runTagStage(deadline: () => boolean): Promise<number> {
         {
           title: bookmark.title,
           description: bookmark.description,
-          content: bookmark.content,
+          content: withOcr(bookmark.content, await ensureOcr(bookmark.id).catch(() => null)),
           url: bookmark.url,
           language: settings.aiLanguage,
           tagStyle: settings.tagStyle,

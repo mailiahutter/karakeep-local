@@ -75,6 +75,9 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
           // Le modèle GGUF est mappé en mémoire : sans largeHeap, l'allocation
           // du contexte échoue sur certaines ROMs.
           enableProguardInReleaseBuilds: false,
+          // Pendant de `extractNativeLibs` (voir withAndroidTweaks) : sans
+          // cela, Gradle range les bibliothèques de yt-dlp non extractibles.
+          useLegacyPackaging: true,
         },
       },
     ],

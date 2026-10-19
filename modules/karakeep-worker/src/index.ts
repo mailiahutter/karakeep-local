@@ -15,6 +15,10 @@ interface KarakeepWorkerNative {
   cancelDaily(): void;
   scheduledWindow(): { hour: number; minute: number } | null;
   diagnostics(): WorkerDiagnostics;
+  recognizeText(path: string): Promise<string>;
+  ytdlpDownload(url: string, dir: string): Promise<{ files: string[]; info: string }>;
+  ytdlpUpdate(): Promise<string>;
+  ytdlpVersion(): Promise<string | null>;
 }
 
 export interface WorkerDiagnostics {
@@ -76,6 +80,54 @@ export function scheduledWindow(): { hour: number; minute: number } | null {
 export function workerDiagnostics(): WorkerDiagnostics | null {
   try {
     return native?.diagnostics() ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Les fonctions de capture et d'analyse natives sont-elles présentes ? */
+export function hasMediaTools(): boolean {
+  return typeof native?.recognizeText === "function";
+}
+
+/** Texte lu dans une image (ML Kit, hors ligne). `null` si indisponible. */
+export async function recognizeText(path: string): Promise<string | null> {
+  if (!hasMediaTools()) return null;
+  return native!.recognizeText(path);
+}
+
+export interface YtdlpResult {
+  files: string[];
+  /** Métadonnées JSON de yt-dlp, une ligne par élément téléchargé. */
+  info: Record<string, unknown>[];
+}
+
+/** Téléchargement par yt-dlp dans `dir`. Lève une erreur en cas d'échec. */
+export async function ytdlpDownload(url: string, dir: string): Promise<YtdlpResult> {
+  if (!hasMediaTools()) throw new Error("yt-dlp absent de cette version");
+  const raw = await native!.ytdlpDownload(url, dir);
+  const info: Record<string, unknown>[] = [];
+  for (const line of raw.info.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith("{")) continue;
+    try {
+      info.push(JSON.parse(trimmed));
+    } catch {
+      // Ligne de progression ou d'avertissement : ignorée.
+    }
+  }
+  return { files: raw.files, info };
+}
+
+export async function ytdlpUpdate(): Promise<string | null> {
+  if (!hasMediaTools()) return null;
+  return native!.ytdlpUpdate();
+}
+
+export async function ytdlpVersion(): Promise<string | null> {
+  if (!hasMediaTools()) return null;
+  try {
+    return await native!.ytdlpVersion();
   } catch {
     return null;
   }
