@@ -22,6 +22,7 @@ import {
 } from "../../src/db/bookmarks";
 import { listAssets, type Asset } from "../../src/db/assets";
 import { AssetViewer } from "../../src/ui/AssetViewer";
+import { HighlightableContent } from "../../src/ui/HighlightableContent";
 import { attachTags, detachTag } from "../../src/db/tags";
 import { assignTheme, listThemes, type Theme } from "../../src/db/themes";
 import type { Bookmark } from "../../src/db/types";
@@ -419,14 +420,7 @@ export default function BookmarkScreen() {
       )}
 
       {bookmark.content && (
-        <Card>
-          <Text style={[styles.sectionLabel, { color: t.textMuted }]}>
-            Contenu extrait
-          </Text>
-          <Text style={[styles.body, { color: t.text }]}>
-            {bookmark.content}
-          </Text>
-        </Card>
+        <HighlightableContent bookmarkId={bookmark.id} content={bookmark.content} />
       )}
 
       <Row style={styles.actions}>
