@@ -4,7 +4,7 @@ import type { ConfigContext, ExpoConfig } from "expo/config";
  * La version affichée dans l'app et comparée aux releases GitHub par le bouton
  * de mise à jour. Le workflow CI la dérive du tag git.
  */
-const VERSION = process.env.APP_VERSION ?? "3.2.0";
+const VERSION = process.env.APP_VERSION ?? "3.3.0";
 
 /**
  * Android refuse d'installer une mise à jour dont le versionCode n'est pas
