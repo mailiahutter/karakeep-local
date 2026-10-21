@@ -19,6 +19,9 @@ export interface Subtheme {
   name: string;
   /** Consigne de rangement donnée au modèle. Voir `classify.ts`. */
   description: string | null;
+  /** Critères tirés des rangements de l'utilisateur. Voir `ai/criteria.ts`. */
+  learnedCriteria?: string | null;
+  learnedFrom?: number;
   position: number;
   count?: number;
 }
@@ -28,6 +31,8 @@ export interface Theme {
   name: string;
   icon: string | null;
   description: string | null;
+  learnedCriteria?: string | null;
+  learnedFrom?: number;
   position: number;
   subthemes: Subtheme[];
   count?: number;
@@ -123,6 +128,8 @@ interface ThemeRow {
   name: string;
   icon: string | null;
   description: string | null;
+  learned_criteria?: string | null;
+  learned_from?: number;
   position: number;
 }
 
@@ -131,6 +138,8 @@ interface SubthemeRow {
   theme_id: string;
   name: string;
   description: string | null;
+  learned_criteria?: string | null;
+  learned_from?: number;
   position: number;
 }
 
@@ -192,6 +201,8 @@ export async function listThemes(): Promise<Theme[]> {
     name: t.name,
     icon: t.icon,
     description: t.description,
+    learnedCriteria: t.learned_criteria ?? null,
+    learnedFrom: t.learned_from ?? 0,
     position: t.position,
     count: tc.get(t.id) ?? 0,
     subthemes: subs
@@ -201,6 +212,8 @@ export async function listThemes(): Promise<Theme[]> {
         themeId: s.theme_id,
         name: s.name,
         description: s.description,
+        learnedCriteria: s.learned_criteria ?? null,
+        learnedFrom: s.learned_from ?? 0,
         position: s.position,
         count: sc.get(s.id) ?? 0,
       })),
@@ -333,4 +346,32 @@ export async function isHumanClassified(bookmarkId: string): Promise<boolean> {
     [bookmarkId],
   );
   return row?.theme_source === "human";
+}
+
+/** Critères appris (ou effacés par l'utilisateur, `null`). */
+export async function setLearnedCriteria(
+  kind: "theme" | "subtheme",
+  id: string,
+  criteria: string | null,
+  learnedFrom: number,
+): Promise<void> {
+  const db = await getDb();
+  const table = kind === "theme" ? "themes" : "subthemes";
+  await db.runAsync(`UPDATE ${table} SET learned_criteria = ?, learned_from = ? WHERE id = ?`, [
+    criteria,
+    learnedFrom,
+    id,
+  ]);
+}
+
+/** Retire des idées de leur tiroir : elles rejoignent « À vérifier ». */
+export async function unfileBookmarks(ids: string[]): Promise<void> {
+  const db = await getDb();
+  for (const id of ids) {
+    await db.runAsync(
+      `UPDATE bookmarks SET theme_id = NULL, subtheme_id = NULL, theme_source = NULL,
+         verified_at = NULL, updated_at = ? WHERE id = ?`,
+      [Date.now(), id],
+    );
+  }
 }

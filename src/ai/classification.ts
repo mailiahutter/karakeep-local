@@ -148,7 +148,7 @@ async function optionVectors(
     const own = await safeEmbed(
       run,
       `${prefix}:${o.id}`,
-      o.description ? `${o.name}. ${o.description}` : o.name,
+      [o.name, o.description, o.learned].filter(Boolean).join(". "),
     );
     if (own) vectors.push(own);
     for (const e of examples.filter((x) => x.optionId === o.id).slice(0, EXAMPLES_PER_CENTROID)) {

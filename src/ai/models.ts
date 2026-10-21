@@ -39,6 +39,17 @@ export interface ModelDescriptor {
 
 export const MODELS: ModelDescriptor[] = [
   {
+    id: "qwen3-4b-instruct-2507-q4km",
+    label: "Qwen 3 4B Instruct (2507)",
+    bytes: 2_497_280_736,
+    ramHint: "8 Go et plus",
+    speedHint: "environ 2 à 4 min par lien",
+    url: "https://huggingface.co/bartowski/Qwen_Qwen3-4B-Instruct-2507-GGUF/resolve/main/Qwen_Qwen3-4B-Instruct-2507-Q4_K_M.gguf",
+    fileName: "Qwen_Qwen3-4B-Instruct-2507-Q4_K_M.gguf",
+    notes:
+      "Le meilleur choix par défaut depuis la 3.3 : une génération plus récente, nettement plus juste que Qwen 2.5 3B pour comprendre et ranger, pour un coût à peine plus élevé. Multilingue, respecte les formats imposés.",
+  },
+  {
     id: "qwen2.5-7b-instruct-q4km",
     label: "Qwen 2.5 7B Instruct",
     bytes: 4_683_074_240,
@@ -59,7 +70,7 @@ export const MODELS: ModelDescriptor[] = [
     url: "https://huggingface.co/bartowski/Qwen2.5-3B-Instruct-GGUF/resolve/main/Qwen2.5-3B-Instruct-Q4_K_M.gguf",
     fileName: "Qwen2.5-3B-Instruct-Q4_K_M.gguf",
     notes:
-      "Le meilleur choix par défaut : multilingue solide et respectueux des consignes de format JSON.",
+      "L'ancien choix par défaut : plus rapide que Qwen 3 4B, mais se trompe plus souvent de tiroir.",
   },
   {
     id: "llama-3.2-3b-instruct-q4km",
@@ -108,3 +119,7 @@ export function formatBytes(bytes: number): string {
   }
   return `${value.toFixed(value >= 10 ? 0 : 1)} ${units[unit]}`;
 }
+
+/** Modèle recommandé, et ceux qu'il remplace sans demander. */
+export const RECOMMENDED_MODEL_ID = "qwen3-4b-instruct-2507-q4km";
+export const SUPERSEDED_MODEL_IDS = ["qwen2.5-3b-instruct-q4km"];

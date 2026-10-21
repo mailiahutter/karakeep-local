@@ -1,35 +1,19 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useCallback, useEffect, useState } from "react";
 import {
-  Alert,
   KeyboardAvoidingView,
   Modal,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from "react-native";
 
-import {
-  createSubtheme,
-  createTheme,
-  listThemes,
-  updateSubtheme,
-  updateTheme,
-  type Theme,
-} from "../db/themes";
-import { normalizeIconInput } from "./icons";
+import { listThemes, type Theme } from "../db/themes";
+import { ThemeForm, type ThemeFormMode } from "./ThemeForm";
 import { ThemeIcon } from "./ThemeIcon";
-import { notifyBookmarksChanged } from "./events";
 import { radius, spacing, useTheme } from "./theme";
-
-type Form =
-  | { kind: "new-theme" }
-  | { kind: "edit-theme"; theme: Theme }
-  | { kind: "new-sub"; theme: Theme }
-  | { kind: "edit-sub"; theme: Theme; subId: string };
 
 /**
  * « Ranger dans… » : tous les tiroirs et leurs sous-thèmes.
@@ -52,10 +36,7 @@ export function DrawerPicker({
 }) {
   const t = useTheme();
   const [themes, setThemes] = useState<Theme[]>([]);
-  const [form, setForm] = useState<Form | null>(null);
-  const [name, setName] = useState("");
-  const [emoji, setEmoji] = useState("");
-  const [description, setDescription] = useState("");
+  const [form, setForm] = useState<ThemeFormMode | null>(null);
 
   const load = useCallback(async () => setThemes(await listThemes()), []);
   useEffect(() => {
@@ -65,74 +46,7 @@ export function DrawerPicker({
     }
   }, [visible, load]);
 
-  const open = (next: Form) => {
-    setForm(next);
-    if (next.kind === "edit-theme") {
-      setName(next.theme.name);
-      setEmoji(next.theme.icon ?? "");
-      setDescription(next.theme.description ?? "");
-    } else if (next.kind === "edit-sub") {
-      const sub = next.theme.subthemes.find((s) => s.id === next.subId);
-      setName(sub?.name ?? "");
-      setDescription(sub?.description ?? "");
-      setEmoji("");
-    } else {
-      setName("");
-      setEmoji(next.kind === "new-theme" ? "📁" : "");
-      setDescription("");
-    }
-  };
-
-  const changed = async () => {
-    await load();
-    notifyBookmarksChanged();
-    onThemesChanged?.();
-  };
-
-  const save = async () => {
-    if (!form) return;
-    const label = name.trim();
-    if (!label) {
-      Alert.alert("Nom manquant", "Donne un nom au tiroir.");
-      return;
-    }
-    try {
-      if (form.kind === "new-theme") {
-        const id = await createTheme(label, normalizeIconInput(emoji) ?? "📁", description);
-        await changed();
-        onPick(id, null);
-      } else if (form.kind === "edit-theme") {
-        await updateTheme(form.theme.id, {
-          name: label,
-          icon: normalizeIconInput(emoji),
-          description,
-        });
-        await changed();
-        setForm(null);
-      } else if (form.kind === "new-sub") {
-        const id = await createSubtheme(form.theme.id, label, description);
-        await changed();
-        onPick(form.theme.id, id);
-      } else {
-        await updateSubtheme(form.subId, { name: label, description });
-        await changed();
-        setForm(null);
-      }
-    } catch (err) {
-      // Nom déjà pris : l'index unique de la base le refuse.
-      Alert.alert("Impossible d'enregistrer", /UNIQUE/i.test(String(err)) ? "Ce nom existe déjà." : String(err));
-    }
-  };
-
-  const formTitle =
-    form?.kind === "new-theme"
-      ? "Nouveau tiroir"
-      : form?.kind === "edit-theme"
-        ? "Modifier le tiroir"
-        : form?.kind === "new-sub"
-          ? `Nouveau sous-thème dans ${form.theme.name}`
-          : "Modifier le sous-thème";
-  const withEmoji = form?.kind === "new-theme" || form?.kind === "edit-theme";
+  const open = (next: ThemeFormMode) => setForm(next);
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
@@ -142,44 +56,18 @@ export function DrawerPicker({
             <View style={[styles.grab, { backgroundColor: t.border }]} />
 
             {form ? (
-              <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ gap: spacing.sm, paddingBottom: spacing.xl }}>
-                <Text style={[styles.title, { color: t.text }]}>{formTitle}</Text>
-                <View style={{ flexDirection: "row", gap: spacing.sm }}>
-                  {withEmoji && (
-                    <TextInput
-                      value={emoji}
-                      onChangeText={setEmoji}
-                      placeholder="🙂"
-                      style={[styles.input, { width: 56, textAlign: "center", color: t.text, backgroundColor: t.surfaceAlt }]}
-                      accessibilityLabel="Emoji (n'importe lequel de ton clavier)"
-                    />
-                  )}
-                  <TextInput
-                    value={name}
-                    onChangeText={setName}
-                    placeholder="Nom"
-                    placeholderTextColor={t.textFaint}
-                    autoFocus
-                    style={[styles.input, { flex: 1, color: t.text, backgroundColor: t.surfaceAlt }]}
-                  />
-                </View>
-                <TextInput
-                  value={description}
-                  onChangeText={setDescription}
-                  placeholder="Ce qu'on y range — l'IA lit cette phrase pour décider. Ex. : laisses, harnais et colliers pour chien."
-                  placeholderTextColor={t.textFaint}
-                  multiline
-                  style={[styles.input, { minHeight: 70, textAlignVertical: "top", color: t.text, backgroundColor: t.surfaceAlt }]}
-                />
-                <Pressable onPress={() => void save()} style={[styles.primary, { backgroundColor: t.accent }]}>
-                  <Text style={{ color: t.accentText, fontWeight: "700" }}>
-                    {form.kind === "new-theme" || form.kind === "new-sub" ? "Créer et y ranger l'idée" : "Enregistrer"}
-                  </Text>
-                </Pressable>
-                <Pressable onPress={() => setForm(null)} style={styles.secondary}>
-                  <Text style={{ color: t.textMuted }}>Annuler</Text>
-                </Pressable>
-              </ScrollView>
+              <ThemeForm
+                key={`${form.kind}-${"theme" in form ? form.theme.id : ""}-${form.kind === "edit-sub" ? form.subId : ""}`}
+                mode={form}
+                createLabel="Créer et y ranger l'idée"
+                onCancel={() => setForm(null)}
+                onDone={(r) => {
+                  void load();
+                  onThemesChanged?.();
+                  if (r.created && r.themeId) onPick(r.themeId, r.subthemeId);
+                  else setForm(null);
+                }}
+              />
             ) : (
               <>
                 <View style={styles.header}>
@@ -267,7 +155,4 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     marginLeft: spacing.xl,
   },
-  input: { borderRadius: radius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, fontSize: 15 },
-  primary: { alignItems: "center", paddingVertical: spacing.md, borderRadius: radius.md, marginTop: spacing.sm },
-  secondary: { alignItems: "center", paddingVertical: spacing.sm },
 });

@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import {
+  Alert,
   Image,
   Pressable,
   RefreshControl,
@@ -12,6 +13,8 @@ import {
 } from "react-native";
 
 import { countDoubts, listDrawers, type Drawer } from "../../src/db/verify";
+import { listThemes, type Theme } from "../../src/db/themes";
+import { ThemeEditorSheet, type ThemeFormMode } from "../../src/ui/ThemeForm";
 import { getDb } from "../../src/db/client";
 import { processPending, subscribe } from "../../src/pipeline/queue";
 import { QueueBanner } from "../../src/ui/QueueBanner";
@@ -36,6 +39,8 @@ export default function DrawersScreen() {
   const [doubts, setDoubts] = useState(0);
   const [unsorted, setUnsorted] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
+  const [themes, setThemes] = useState<Theme[]>([]);
+  const [editing, setEditing] = useState<ThemeFormMode | null>(null);
 
   const load = useCallback(async () => {
     const { at } = await previousVisit();
@@ -45,6 +50,7 @@ export default function DrawersScreen() {
       "SELECT COUNT(*) AS n FROM bookmarks WHERE archived = 0 AND theme_id IS NULL AND verified_at IS NOT NULL",
     );
     setDrawers(d);
+    setThemes(await listThemes());
     setDoubts(n);
     setUnsorted(row?.n ?? 0);
   }, []);
@@ -60,6 +66,17 @@ export default function DrawersScreen() {
       }),
     [load],
   );
+
+  /** Le menu d'un tiroir : le modifier, lui ajouter un sous-thème. */
+  const edit = (id: string) => {
+    const theme = themes.find((x) => x.id === id);
+    if (!theme) return;
+    Alert.alert(`${theme.icon ?? ""} ${theme.name}`.trim(), undefined, [
+      { text: "Nouveau sous-thème", onPress: () => setEditing({ kind: "new-sub", theme }) },
+      { text: "Modifier ou supprimer", onPress: () => setEditing({ kind: "edit-theme", theme }) },
+      { text: "Annuler", style: "cancel" },
+    ]);
+  };
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -117,7 +134,9 @@ export default function DrawersScreen() {
             <Pressable
               key={d.id}
               onPress={() => router.push({ pathname: "/theme/[id]", params: { id: d.id, title: d.name } })}
+              onLongPress={() => edit(d.id)}
               accessibilityRole="button"
+              accessibilityHint="Appui long pour modifier le tiroir"
               accessibilityLabel={`${d.name}, ${d.count} idées`}
               style={({ pressed }) => [
                 styles.drawer,
@@ -142,9 +161,24 @@ export default function DrawersScreen() {
                   {d.name}
                 </Text>
                 <Text style={[styles.count, { color: t.textFaint }]}>{d.count}</Text>
+                <Pressable onPress={() => edit(d.id)} hitSlop={10} accessibilityLabel={`Modifier ${d.name}`}>
+                  <Ionicons name="ellipsis-vertical" size={16} color={t.textFaint} />
+                </Pressable>
               </View>
             </Pressable>
           ))}
+          <Pressable
+            onPress={() => setEditing({ kind: "new-theme" })}
+            accessibilityRole="button"
+            style={({ pressed }) => [
+              styles.drawer,
+              styles.newDrawer,
+              { borderColor: t.border, opacity: pressed ? 0.7 : 1 },
+            ]}
+          >
+            <Ionicons name="add-circle-outline" size={34} color={t.accent} />
+            <Text style={{ color: t.accent, fontWeight: "700" }}>Nouveau tiroir</Text>
+          </Pressable>
           {unsorted > 0 && (
             <Pressable
               onPress={() => router.push("/list")}
@@ -165,6 +199,8 @@ export default function DrawersScreen() {
           <Text style={{ color: t.accent, fontWeight: "600" }}>Toutes les idées, en liste</Text>
         </Pressable>
       </ScrollView>
+
+      <ThemeEditorSheet mode={editing} onClose={() => setEditing(null)} onDone={() => void load()} />
 
       <Pressable
         onPress={() => router.push("/add")}
@@ -212,6 +248,13 @@ const styles = StyleSheet.create({
   name: { flex: 1, fontSize: 14, fontWeight: "700" },
   count: { fontSize: 13 },
   all: { alignSelf: "center", padding: spacing.lg },
+  newDrawer: {
+    borderStyle: "dashed",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.xs,
+    minHeight: 150,
+  },
   fab: {
     position: "absolute",
     right: spacing.xl,

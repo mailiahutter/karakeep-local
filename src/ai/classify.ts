@@ -25,13 +25,16 @@ export interface ClassifyOption {
    * souvent ambigu ; « Chien (harnais, éducation, santé) » ne l'est plus.
    */
   contains?: string[];
+  /** Critères tirés des rangements de l'utilisateur (voir `criteria.ts`). */
+  learned?: string | null;
 }
 
 export interface ThemeTree {
   id: string;
   name: string;
   description?: string | null;
-  subthemes: { id: string; name: string; description?: string | null }[];
+  learnedCriteria?: string | null;
+  subthemes: { id: string; name: string; description?: string | null; learnedCriteria?: string | null }[];
 }
 
 /**
@@ -56,6 +59,7 @@ export function buildThemeOptions(themes: ThemeTree[]): ClassifyOption[] {
     name: theme.name,
     description: trimDescription(theme.description),
     contains: theme.subthemes.map((s) => s.name),
+    learned: theme.learnedCriteria ?? null,
   }));
 }
 
@@ -72,6 +76,7 @@ export function buildSubthemeOptions(theme: ThemeTree): ClassifyOption[] {
     name: sub.name,
     description:
       trimDescription(sub.description) ?? trimDescription(theme.description),
+    learned: sub.learnedCriteria ?? null,
   }));
 }
 
@@ -96,9 +101,10 @@ export function buildChoicePrompt(
   const list = options
     .map((o) => {
       const contains = o.contains?.length ? ` (contient : ${o.contains.join(", ")})` : "";
-      return o.description
+      const head = o.description
         ? `${o.index}. ${o.name}${contains} — ${o.description}`
         : `${o.index}. ${o.name}${contains}`;
+      return o.learned ? `${head}\n   D'après ses rangements : ${o.learned}` : head;
     })
     .join("\n");
 

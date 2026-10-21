@@ -39,6 +39,8 @@ import { ensureOcr } from "./ocr";
 import { refreshYtdlpWeekly } from "./ytdlpUpdate";
 import { saveClassificationMeta } from "../db/verify";
 import { embed, embedCached, ensureEmbedderDownloaded } from "../ai/embed";
+import { upgradeModelIfNeeded } from "../ai/upgrade";
+import { refreshLearnedCriteria } from "./learnCriteria";
 
 /**
  * File de traitement d'arrière-plan.
@@ -164,6 +166,8 @@ async function runFetchStage(deadline: () => boolean): Promise<number> {
 }
 
 async function runTagStage(deadline: () => boolean): Promise<number> {
+  // Avant de lire les réglages : le changement de modèle les modifie.
+  await upgradeModelIfNeeded();
   const settings = await loadSettings();
   if (!settings.autoTag) return 0;
 
@@ -181,6 +185,8 @@ async function runTagStage(deadline: () => boolean): Promise<number> {
   void ensureEmbedderDownloaded();
 
   const modelPath = modelPathFor(model);
+  // Les critères appris d'abord : les liens rangés juste après en profitent.
+  await refreshLearnedCriteria(modelPath, deadline).catch(() => 0);
   const batch = await pendingBookmarks("ai_status", 10);
   let done = 0;
 
@@ -211,12 +217,15 @@ async function runTagStage(deadline: () => boolean): Promise<number> {
           id: t.id,
           name: t.name,
           // La consigne écrite par l'utilisateur suit jusqu'au prompt : sans
-          // elle, le modèle ne dispose que d'un intitulé ambigu.
+          // elle, le modèle ne dispose que d'un intitulé ambigu. Les critères
+          // appris de ses rangements la complètent.
           description: t.description,
+          learnedCriteria: t.learnedCriteria ?? null,
           subthemes: t.subthemes.map((s) => ({
             id: s.id,
             name: s.name,
             description: s.description,
+            learnedCriteria: s.learnedCriteria ?? null,
           })),
         })),
         {

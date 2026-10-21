@@ -468,4 +468,19 @@ export const MIGRATIONS: string[] = [
      AND (theme_source IS NULL OR theme_source <> 'human')
      AND (ai_status <> 'pending' OR fetch_status = 'pending');
   `,
+
+  // 015 — version 3.3 : critères appris.
+  //
+  // La description d'un tiroir est écrite une fois par l'utilisateur ; ses
+  // habitudes, elles, évoluent. La nuit, le modèle relit ce qui a été rangé à
+  // la main dans chaque tiroir et en tire des critères (« harnais, laisses,
+  // colliers, accessoires de promenade ; pas la nourriture »), montrés au
+  // modèle à côté de la description. `learned_from` dit sur combien de liens
+  // ils reposent : ils sont réécrits quand assez de nouveaux s'ajoutent.
+  `
+  ALTER TABLE themes    ADD COLUMN learned_criteria TEXT;
+  ALTER TABLE themes    ADD COLUMN learned_from INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE subthemes ADD COLUMN learned_criteria TEXT;
+  ALTER TABLE subthemes ADD COLUMN learned_from INTEGER NOT NULL DEFAULT 0;
+  `,
 ];

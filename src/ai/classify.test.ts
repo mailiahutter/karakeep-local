@@ -246,3 +246,11 @@ test("un titre seul ne suffit pas pour ranger", async () => {
   assert.equal(isThin("Titre : Instagram"), true);
   assert.equal(isThin("Titre : Harnais\nSujet : Un harnais en cuir pour chien fait main à Hambourg."), false);
 });
+
+test("les critères appris sont montrés sous la catégorie", () => {
+  const tree: ThemeTree[] = [
+    { id: "c", name: "Chien", description: "Tout pour le chien.", learnedCriteria: "Harnais, laisses ; pas la nourriture.", subthemes: [] },
+  ];
+  const prompt = buildChoicePrompt(buildThemeOptions(tree), "x", "Aucune");
+  assert.match(prompt, /1\. Chien — Tout pour le chien\.\n   D'après ses rangements : Harnais, laisses ; pas la nourriture\./);
+});
