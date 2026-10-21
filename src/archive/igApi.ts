@@ -1,4 +1,5 @@
 import { normalizePost, parseEmbedContext, type IgPost } from "./igParse";
+import { canonicalPostUrl, instagramShortcode, isInstagramShare } from "./instagram";
 
 /**
  * Récupération d'une publication Instagram par ses adresses de données.
@@ -198,4 +199,28 @@ export async function fetchInstagramPost(
     }
   }
   return null;
+}
+
+/**
+ * Suit un lien « Partager » (`instagram.com/share/…`) jusqu'à la publication.
+ *
+ * Comme Cobalt : avec un agent de navigateur, Instagram sert une page au lieu
+ * de rediriger ; avec celui de curl, il redirige. Si une page arrive quand
+ * même, l'adresse canonique y est lue. Renvoie l'adresse d'origine quand
+ * rien n'aboutit — la capture tentera sa chance avec.
+ */
+export async function resolveInstagramUrl(url: string, cookie?: string | null): Promise<string> {
+  if (!isInstagramShare(url)) return url;
+  try {
+    const res = await fetchWithTimeout(url, {
+      headers: { "User-Agent": "curl/7.88.1", ...(cookie ? { cookie } : {}) },
+      redirect: "follow",
+    });
+    if (res.url && instagramShortcode(res.url)) return res.url;
+    const canonical = canonicalPostUrl(await res.text());
+    if (canonical && instagramShortcode(canonical)) return canonical;
+  } catch {
+    // Adresse d'origine.
+  }
+  return url;
 }

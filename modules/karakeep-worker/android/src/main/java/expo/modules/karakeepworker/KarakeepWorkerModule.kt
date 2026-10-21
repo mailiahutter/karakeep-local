@@ -81,9 +81,9 @@ class KarakeepWorkerModule : Module() {
     }
 
     /** Téléchargement par yt-dlp. */
-    AsyncFunction("ytdlpDownload") { url: String, dir: String, promise: Promise ->
+    AsyncFunction("ytdlpDownload") { url: String, dir: String, cookie: String?, promise: Promise ->
       val ctx = context
-      MediaTools.background({ MediaTools.download(ctx, url, dir) }) { r ->
+      MediaTools.background({ MediaTools.download(ctx, url, dir, cookie) }) { r ->
         r.fold({ promise.resolve(it) }, { promise.reject("ERR_YTDLP", it.message ?: "yt-dlp a échoué", it) })
       }
     }
@@ -100,6 +100,15 @@ class KarakeepWorkerModule : Module() {
       MediaTools.background({ MediaTools.version(ctx) }) { r ->
         r.fold({ promise.resolve(it) }, { promise.reject("ERR_YTDLP", it.message ?: "yt-dlp indisponible", it) })
       }
+    }
+
+    /**
+     * Cookies que la WebView de l'application détient pour une adresse —
+     * en pratique, la session Instagram ouverte dans Réglages. Rien n'est
+     * envoyé ailleurs qu'au site lui-même.
+     */
+    Function("cookieFor") { url: String ->
+      android.webkit.CookieManager.getInstance().getCookie(url)
     }
 
     /** Archive ZIP pour la sauvegarde. */

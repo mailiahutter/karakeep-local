@@ -80,7 +80,7 @@ test("la consigne de l'utilisateur est donnée au modèle", () => {
     "Titre : Yamaha Ténéré 700",
     "Aucune de ces catégories",
   );
-  assert.ok(p.includes("1. Moto — La moto en tant que machine."));
+  assert.ok(p.includes("1. Moto (contient : Ma sélection, Tuning) — La moto en tant que machine."));
   assert.ok(p.includes("3. Divers\n"));
   assert.ok(p.includes("0. Aucune de ces catégories"));
   assert.ok(p.includes("Yamaha Ténéré 700"));
@@ -211,4 +211,38 @@ test("la proposition de tiroir est lue et nettoyée", async () => {
   assert.equal(parseSuggestion("pas de json"), null);
   assert.equal(parseSuggestion('{"name": "", "emoji": "x", "description": ""}'), null);
   assert.equal(parseSuggestion('{"name": "Jardin", "emoji": "", "description": ""}')?.emoji, "📁");
+});
+
+test("les sous-thèmes précisent ce que contient chaque thème", () => {
+  const prompt = buildChoicePrompt(buildThemeOptions(TREE), "x", "Aucune");
+  assert.match(prompt, /1\. Moto \(contient : Ma sélection, Tuning\) — La moto/);
+  assert.match(prompt, /3\. Divers\n/);
+});
+
+test("le vote des voisins désigne la catégorie majoritaire", async () => {
+  const { nearestVote } = await import("./classify.ts");
+  const v = nearestVote([1, 0], [
+    { vector: [1, 0.05], optionId: "chien" },
+    { vector: [0.95, 0.1], optionId: "chien" },
+    { vector: [0.9, 0.2], optionId: "chien" },
+    { vector: [0, 1], optionId: "van" },
+  ]);
+  assert.equal(v?.optionId, "chien");
+  assert.ok(v!.share > 0.9);
+});
+
+test("un vote net corrige un modèle hésitant, jamais un modèle sûr", async () => {
+  const { arbitrate } = await import("./classify.ts");
+  const vote = { optionId: "chien", share: 0.8, best: 0.9 };
+  assert.deepEqual(arbitrate({ id: "van", confidence: 0.4 }, vote, 5), { id: "chien", confidence: 0.72, byVote: true });
+  assert.equal(arbitrate({ id: "van", confidence: 0.9 }, vote, 5).id, "van");
+  assert.equal(arbitrate({ id: null, confidence: null }, vote, 5).id, "chien");
+  assert.equal(arbitrate({ id: "van", confidence: 0.4 }, vote, 2).id, "van");
+  assert.equal(arbitrate({ id: "chien", confidence: 0.5 }, vote, 5).confidence, 0.8);
+});
+
+test("un titre seul ne suffit pas pour ranger", async () => {
+  const { isThin } = await import("./classify.ts");
+  assert.equal(isThin("Titre : Instagram"), true);
+  assert.equal(isThin("Titre : Harnais\nSujet : Un harnais en cuir pour chien fait main à Hambourg."), false);
 });

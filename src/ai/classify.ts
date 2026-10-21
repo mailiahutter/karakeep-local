@@ -20,6 +20,11 @@ export interface ClassifyOption {
   id: string;
   name: string;
   description: string | null;
+  /**
+   * Ce que contient la catégorie (ses sous-thèmes). Un intitulé seul est
+   * souvent ambigu ; « Chien (harnais, éducation, santé) » ne l'est plus.
+   */
+  contains?: string[];
 }
 
 export interface ThemeTree {
@@ -50,6 +55,7 @@ export function buildThemeOptions(themes: ThemeTree[]): ClassifyOption[] {
     id: theme.id,
     name: theme.name,
     description: trimDescription(theme.description),
+    contains: theme.subthemes.map((s) => s.name),
   }));
 }
 
@@ -88,7 +94,12 @@ export function buildChoicePrompt(
   examples: ClassifyExample[] = [],
 ): string {
   const list = options
-    .map((o) => (o.description ? `${o.index}. ${o.name} — ${o.description}` : `${o.index}. ${o.name}`))
+    .map((o) => {
+      const contains = o.contains?.length ? ` (contient : ${o.contains.join(", ")})` : "";
+      return o.description
+        ? `${o.index}. ${o.name}${contains} — ${o.description}`
+        : `${o.index}. ${o.name}${contains}`;
+    })
     .join("\n");
 
   const byId = new Map(options.map((o) => [o.id, o]));
@@ -307,4 +318,92 @@ export function parseSuggestion(raw: string): ThemeSuggestion | null {
   } catch {
     return null;
   }
+}
+
+// --- Vote des plus proches voisins ---------------------------------------
+
+export interface Vote {
+  optionId: string;
+  /** Part des voisins, pondérée par la proximité, qui désignent cette option. */
+  share: number;
+  /** Proximité du voisin le plus proche. */
+  best: number;
+}
+
+/**
+ * Où l'utilisateur a-t-il rangé les liens qui ressemblent le plus à celui-ci ?
+ *
+ * C'est la mémoire de ses corrections, appliquée sans passer par le modèle de
+ * langage : si les cinq liens les plus proches sont tous dans « Chien », ce
+ * lien y va très probablement aussi — quelle que soit la langue ou la façon
+ * dont le petit modèle a résumé.
+ */
+export function nearestVote(
+  documentVector: number[] | null,
+  examples: { vector: number[]; optionId: string }[],
+  k = 5,
+): Vote | null {
+  if (!documentVector || examples.length === 0) return null;
+  const scored = examples
+    .map((e) => ({ optionId: e.optionId, sim: cosine(documentVector, e.vector) }))
+    .sort((a, b) => b.sim - a.sim)
+    .slice(0, k);
+  const weights = new Map<string, number>();
+  let total = 0;
+  for (const s of scored) {
+    const w = Math.max(0, s.sim);
+    weights.set(s.optionId, (weights.get(s.optionId) ?? 0) + w);
+    total += w;
+  }
+  if (total <= 0) return null;
+  const [optionId, weight] = [...weights.entries()].sort((a, b) => b[1] - a[1])[0];
+  return { optionId, share: weight / total, best: scored[0].sim };
+}
+
+/** Seuils au-delà desquels le vote des voisins l'emporte sur un modèle hésitant. */
+export const VOTE_MIN_SHARE = 0.6;
+export const VOTE_MIN_SIMILARITY = 0.55;
+export const VOTE_MIN_NEIGHBOURS = 3;
+
+/**
+ * Arbitrage entre le modèle de langage et le vote des voisins.
+ *
+ * Le vote ne remplace le choix du modèle que s'il est net (majorité claire,
+ * voisins vraiment proches, assez d'exemples) et que le modèle, lui, hésite
+ * ou n'a rien choisi. La certitude retenue est alors celle du vote.
+ */
+export function arbitrate(
+  llm: { id: string | null; confidence: number | null },
+  vote: Vote | null,
+  neighbours: number,
+): { id: string | null; confidence: number | null; byVote: boolean } {
+  const strong =
+    vote !== null &&
+    neighbours >= VOTE_MIN_NEIGHBOURS &&
+    vote.share >= VOTE_MIN_SHARE &&
+    vote.best >= VOTE_MIN_SIMILARITY;
+  if (!strong) return { ...llm, byVote: false };
+  if (llm.id === vote.optionId) {
+    // Les deux s'accordent : c'est la meilleure garantie dont on dispose.
+    return { id: llm.id, confidence: Math.max(llm.confidence ?? 0, vote.share), byVote: false };
+  }
+  if (llm.id === null || (llm.confidence ?? 0) < 0.6) {
+    return { id: vote.optionId, confidence: Math.round(vote.share * 0.9 * 1000) / 1000, byVote: true };
+  }
+  return { ...llm, byVote: false };
+}
+
+/**
+ * Le lien en dit-il assez pour être rangé ? Un titre seul (« Instagram »,
+ * « Publication de @x ») ne suffit pas : mieux vaut le soumettre à
+ * l'utilisateur que le ranger au hasard.
+ */
+export function isThin(document: string): boolean {
+  const body = document
+    .split("\n")
+    .filter((l) => !/^Titre\s*:/.test(l))
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return body.length < 40;
 }

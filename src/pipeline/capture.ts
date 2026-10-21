@@ -18,7 +18,7 @@ import {
   mediaIdentity,
   pickCarousel,
 } from "../archive/instagram";
-import { fetchInstagramPost } from "../archive/igApi";
+import { fetchInstagramPost, resolveInstagramUrl } from "../archive/igApi";
 import type { IgMedia } from "../archive/igParse";
 import { noteAttempt, rankedMethods } from "../archive/igMethods";
 import { pickImages } from "../archive/images";
@@ -31,7 +31,7 @@ import { isNetworkFailure } from "./retry";
 import { summarizeYtdlp, type LocalMedia } from "../archive/ytdlpInfo";
 import { connectionKind } from "../ai/download";
 import { setOcrText } from "../db/ocr";
-import { hasMediaTools, ytdlpDownload } from "../../modules/karakeep-worker/src";
+import { cookieFor, hasMediaTools, ytdlpDownload } from "../../modules/karakeep-worker/src";
 import * as FileSystem from "expo-file-system/legacy";
 
 /**
@@ -114,7 +114,9 @@ export function titleFromCaption(caption: string, author: string | null): string
 async function gatherInstagramApi(url: string): Promise<Gathered | null> {
   const shortcode = instagramShortcode(url);
   if (!shortcode) return null;
-  const result = await fetchInstagramPost(shortcode);
+  // Sans session d'abord, puis avec celle ouverte dans Réglages → Compte
+  // Instagram : certaines publications ne s'obtiennent qu'ainsi.
+  const result = await fetchInstagramPost(shortcode, cookieFor("https://www.instagram.com/") ?? undefined);
   if (!result) return null;
   const { post } = result;
   const firstImage = post.items.find((m) => m.thumb)?.thumb ?? null;
@@ -153,7 +155,7 @@ async function runYtdlp(
   if (!hasMediaTools()) return null;
   const dir = ytdlpDir(bookmarkId);
   await FileSystem.deleteAsync(dir, { idempotent: true });
-  const result = await ytdlpDownload(url, dir.replace(/^file:\/\//, ""));
+  const result = await ytdlpDownload(url, dir.replace(/^file:\/\//, ""), cookieFor(url));
   const summary = summarizeYtdlp(result.info, result.files);
   return summary.media.length > 0 ? { summary } : null;
 }
@@ -292,9 +294,13 @@ async function gatherPage(
 
 export async function captureBookmark(
   bookmarkId: string,
-  url: string,
+  originalUrl: string,
 ): Promise<CaptureOutcome> {
   const notes: string[] = [];
+  // Un lien « Partager » d'Instagram mène à la publication par redirection :
+  // on la suit avant tout, sans quoi aucune méthode ne trouve le bon code.
+  const url = await resolveInstagramUrl(originalUrl, cookieFor("https://www.instagram.com/"));
+  if (url !== originalUrl) notes.push(`Lien de partage résolu : ${url}`);
   const kind = detectSource(url);
   const plan = planFor(kind);
   await setSourceKind(bookmarkId, kind);

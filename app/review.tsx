@@ -26,6 +26,8 @@ import { hostLabel } from "../src/db/urls";
 import { buildSnapshot } from "../src/feedback/collect";
 import type { ReviewSnapshot, Verdict } from "../src/feedback/format";
 import { AssetViewer } from "../src/ui/AssetViewer";
+import { DrawerPicker } from "../src/ui/DrawerPicker";
+import { fileByUser } from "../src/db/verify";
 import { Button, Card, Chip, Row } from "../src/ui/components";
 import { notifyBookmarksChanged } from "../src/ui/events";
 import { radius, spacing, useTheme } from "../src/ui/theme";
@@ -60,6 +62,8 @@ export default function ReviewScreen() {
   const [loading, setLoading] = useState(true);
   const [assets, setAssets] = useState<Asset[]>([]);
   const [viewing, setViewing] = useState<number | null>(null);
+  const [picking, setPicking] = useState(false);
+  const [refiled, setRefiled] = useState<string | null>(null);
   const scroller = useRef<ScrollView>(null);
 
   useEffect(() => {
@@ -75,6 +79,7 @@ export default function ReviewScreen() {
     if (!current) {
       setBookmark(null);
       setSnapshot(null);
+      setRefiled(null);
       setAssets([]);
       return;
     }
@@ -194,7 +199,32 @@ export default function ReviewScreen() {
             ? `Le modèle a compris : « ${snapshot.subject} »`
             : "Le modèle n'a rien compris du document."}
         </Text>
+        {refiled && (
+          <Text style={[styles.hint, { color: t.success }]}>Rangé par toi dans {refiled}</Text>
+        )}
+        <Button
+          label="Ranger ailleurs, créer ou modifier un tiroir"
+          icon="file-tray-stacked-outline"
+          variant="secondary"
+          onPress={() => setPicking(true)}
+        />
       </Aspect>
+
+      <DrawerPicker
+        visible={picking}
+        onClose={() => setPicking(false)}
+        onPick={(themeId, subId) => {
+          setPicking(false);
+          void (async () => {
+            await fileByUser(bookmark.id, themeId, subId);
+            const fresh = await buildSnapshot(bookmark.id);
+            setRefiled(fresh?.theme ?? null);
+            // Ranger soi-même ailleurs, c'est dire que la proposition était fausse.
+            if (fresh?.theme !== snapshot?.theme) setVerdicts((v) => ({ ...v, theme: "bad" }));
+            notifyBookmarksChanged();
+          })();
+        }}
+      />
 
       <Aspect
         label="Tags"

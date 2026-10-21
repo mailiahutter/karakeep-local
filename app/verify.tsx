@@ -142,7 +142,7 @@ export default function VerifyScreen() {
                       onPress={() => void file(bookmark.id, a.id, null)}
                     />
                   ))}
-                  <Choice ghost text="Un autre tiroir…" onPress={() => setPicking(bookmark.id)} />
+                  <Choice ghost text="Un autre tiroir, ou en créer / modifier un…" onPress={() => setPicking(bookmark.id)} />
                 </>
               ) : details.suggestion ? (
                 <SuggestionBlock
@@ -154,7 +154,7 @@ export default function VerifyScreen() {
               ) : (
                 <>
                   <Text style={[styles.conf, { color: t.textMuted }]}>Aucun tiroir ne convient.</Text>
-                  <Choice main text="Choisir un tiroir…" onPress={() => setPicking(bookmark.id)} />
+                  <Choice main text="Choisir ou créer un tiroir…" onPress={() => setPicking(bookmark.id)} />
                   <Choice ghost text="Laisser à trier" onPress={() => void leaveUnsorted(bookmark.id)} />
                 </>
               )}
@@ -165,7 +165,7 @@ export default function VerifyScreen() {
 
       <DrawerPicker
         visible={picking !== null}
-        themes={themes}
+        onThemesChanged={() => void listThemes().then(setThemes)}
         onClose={() => setPicking(null)}
         onPick={(themeId, subId) => {
           const id = picking;

@@ -67,7 +67,8 @@ test("« Tout relancer » reprend ce qui n'a pas abouti, et rien d'autre", () =>
   assert.deepEqual(status(db, "sans-theme"), { fetch: "success", ai: "pending" });
   assert.deepEqual(status(db, "sans-resume"), { fetch: "success", ai: "pending" });
   assert.deepEqual(status(db, "ia-sautee"), { fetch: "success", ai: "pending" });
-  assert.deepEqual(status(db, "insta"), { fetch: "success", ai: "success" });
+  // Publication Instagram sans aucun média : pas vraiment lue, elle repart.
+  assert.deepEqual(status(db, "insta"), { fetch: "pending", ai: "pending" });
   assert.deepEqual(status(db, "archive"), { fetch: "error", ai: "success" });
 
   const attempts = db.prepare("SELECT fetch_attempts AS n FROM bookmarks WHERE id = 'erreur'").get() as { n: number };
@@ -83,5 +84,20 @@ test("la migration 011 refait aussi toutes les publications Instagram", () => {
   assert.deepEqual(status(db, "insta"), { fetch: "pending", ai: "pending" });
   assert.deepEqual(status(db, "fini"), { fetch: "success", ai: "success" });
   assert.deepEqual(status(db, "erreur"), { fetch: "pending", ai: "pending" });
+  db.close();
+});
+
+test("la migration 014 relit les publications Instagram sans média, même déclarées disparues", () => {
+  const db = migrated(13);
+  insert(db, "ig-vide", { source_kind: "instagram" });
+  insert(db, "ig-disparue", { source_kind: "instagram", fetch_status: "error", source_gone: 1, retry_days: 4 });
+  insert(db, "ig-ok", { source_kind: "instagram", theme_source: "human" });
+  db.exec("INSERT INTO assets (id, bookmark_id, kind, path, created_at) VALUES ('m', 'ig-ok', 'image', 'x', 0)");
+  db.exec(MIGRATIONS[13]);
+  assert.deepEqual(status(db, "ig-vide"), { fetch: "pending", ai: "pending" });
+  assert.deepEqual(status(db, "ig-disparue"), { fetch: "pending", ai: "pending" });
+  assert.deepEqual(status(db, "ig-ok"), { fetch: "success", ai: "success" });
+  const gone = db.prepare("SELECT source_gone AS g, retry_days AS r FROM bookmarks WHERE id = 'ig-disparue'").get() as { g: number; r: number };
+  assert.deepEqual({ ...gone }, { g: 0, r: 0 });
   db.close();
 });

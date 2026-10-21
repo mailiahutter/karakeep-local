@@ -24,6 +24,7 @@ import { listAssets, type Asset } from "../../src/db/assets";
 import { AssetViewer } from "../../src/ui/AssetViewer";
 import { HighlightableContent } from "../../src/ui/HighlightableContent";
 import { ReminderSheet } from "../../src/ui/ReminderSheet";
+import { DrawerPicker } from "../../src/ui/DrawerPicker";
 import { fileByUser, setDrawerCover } from "../../src/db/verify";
 import { shareIdea } from "../../src/ui/shareIdea";
 import { attachTags, detachTag } from "../../src/db/tags";
@@ -242,7 +243,7 @@ export default function BookmarkScreen() {
                 <Ionicons name="sparkles" size={13} color={t.accent} />
               )}
               <Ionicons
-                name={picking ? "chevron-up" : "chevron-down"}
+                name="chevron-forward"
                 size={16}
                 color={t.textFaint}
               />
@@ -250,58 +251,15 @@ export default function BookmarkScreen() {
           );
         })()}
 
-        {picking && (
-          <View style={styles.picker}>
-            {themes.map((th) => (
-              <View key={th.id}>
-                {th.subthemes.length === 0 ? (
-                  <Pressable
-                    onPress={() =>
-                      void mutate(() =>
-                        fileByUser(bookmark.id, th.id, null),
-                      ).then(() => setPicking(false))
-                    }
-                    style={styles.pickRow}
-                  >
-                    <Text style={[styles.hint, { color: t.text }]}>{th.name}</Text>
-                  </Pressable>
-                ) : (
-                  <>
-                    <Text style={[styles.pickHeader, { color: t.textFaint }]}>
-                      {th.name}
-                    </Text>
-                    {th.subthemes.map((sb) => (
-                      <Pressable
-                        key={sb.id}
-                        onPress={() =>
-                          void mutate(() =>
-                            fileByUser(bookmark.id, th.id, sb.id),
-                          ).then(() => setPicking(false))
-                        }
-                        style={styles.pickRow}
-                      >
-                        <Ionicons
-                          name={
-                            bookmark.subthemeId === sb.id
-                              ? "radio-button-on"
-                              : "radio-button-off"
-                          }
-                          size={16}
-                          color={
-                            bookmark.subthemeId === sb.id ? t.accent : t.textFaint
-                          }
-                        />
-                        <Text style={[styles.hint, { color: t.text }]}>
-                          {sb.name}
-                        </Text>
-                      </Pressable>
-                    ))}
-                  </>
-                )}
-              </View>
-            ))}
-          </View>
-        )}
+        <DrawerPicker
+          visible={picking}
+          onClose={() => setPicking(false)}
+          onThemesChanged={() => void load()}
+          onPick={(themeId, subId) => {
+            setPicking(false);
+            void mutate(() => fileByUser(bookmark.id, themeId, subId));
+          }}
+        />
       </Card>
 
       {bookmark.description && (

@@ -5,7 +5,9 @@ import {
   captionWithoutHashtags,
   hashtagsFrom,
   instagramEmbedUrl,
+  canonicalPostUrl,
   instagramShortcode,
+  isInstagramShare,
   isJunkMedia,
   isStatsBoilerplate,
   looksLikeLoginWall,
@@ -18,6 +20,27 @@ test("repère le code d'une publication, d'un reel ou d'une vidéo", () => {
   assert.equal(instagramShortcode("https://instagram.com/reel/Abc-1_2/?x=1"), "Abc-1_2");
   assert.equal(instagramShortcode("https://www.instagram.com/tv/Xyz/"), "Xyz");
   assert.equal(instagramShortcode("https://exemple.fr/p/Abc/"), null);
+});
+
+test("un lien « Partager » n'est pas pris pour le code de la publication", () => {
+  // Bug réel : « /share/reel/BAxyz » donnait le code « BAxyz », qui n'existe
+  // pas — la publication était déclarée introuvable alors qu'elle existait.
+  const share = "https://www.instagram.com/share/reel/BAGsOH7d_J/";
+  assert.equal(isInstagramShare(share), true);
+  assert.equal(instagramShortcode(share), null);
+  assert.equal(isInstagramShare("https://www.instagram.com/reel/Abc/"), false);
+});
+
+test("l'adresse réelle se lit dans la page servie à la place de la redirection", () => {
+  assert.equal(
+    canonicalPostUrl('<link rel="canonical" href="https://www.instagram.com/reel/DAbc12_x/" />'),
+    "https://www.instagram.com/reel/DAbc12_x/",
+  );
+  assert.equal(
+    canonicalPostUrl('{"url":"https:\\/\\/www.instagram.com\\/p\\/CXyz\\/"}'),
+    "https://www.instagram.com/p/CXyz",
+  );
+  assert.equal(canonicalPostUrl("<html></html>"), null);
 });
 
 test("construit l'adresse de la page d'intégration", () => {

@@ -10,10 +10,38 @@
  */
 
 /** Repère le code d'une publication, quelle que soit la forme de l'adresse. */
+/**
+ * Lien produit par le bouton « Partager » de l'application Instagram
+ * (`instagram.com/share/…`). Il ne contient pas le code de la publication :
+ * seule la redirection d'Instagram y mène.
+ */
+export function isInstagramShare(url: string): boolean {
+  try {
+    const u = new URL(url);
+    return /(^|\.)instagram\.com$/i.test(u.hostname) && /^\/share\//.test(u.pathname);
+  } catch {
+    return false;
+  }
+}
+
+/** Adresse canonique de la publication trouvée dans une page servie à la place d'une redirection. */
+export function canonicalPostUrl(html: string): string | null {
+  const m =
+    html.match(/<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']+)["']/i) ??
+    html.match(/<meta[^>]+property=["']og:url["'][^>]+content=["']([^"']+)["']/i) ??
+    html.match(/https:\\?\/\\?\/www\.instagram\.com\\?\/(?:p|reel|tv)\\?\/[A-Za-z0-9_-]+/);
+  if (!m) return null;
+  const raw = (m[1] ?? m[0]).replace(/\\\//g, "/");
+  return /\/(?:p|reel|tv)\/[A-Za-z0-9_-]+/.test(raw) ? raw : null;
+}
+
 export function instagramShortcode(url: string): string | null {
   try {
     const u = new URL(url);
     if (!/(^|\.)instagram\.com$/i.test(u.hostname)) return null;
+    // `/share/reel/<id>` : l'identifiant d'un lien « Partager » n'est pas
+    // celui de la publication. Il faut d'abord suivre la redirection.
+    if (isInstagramShare(url)) return null;
     const m = u.pathname.match(/\/(?:p|reel|reels|tv)\/([A-Za-z0-9_-]+)/);
     return m ? m[1] : null;
   } catch {

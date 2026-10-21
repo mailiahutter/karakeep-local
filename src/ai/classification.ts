@@ -3,8 +3,11 @@ import {
   CLASSIFY_SYSTEM_PROMPT,
   buildChoicePrompt,
   buildSubthemeOptions,
+  arbitrate,
   buildThemeOptions,
   centroid,
+  isThin,
+  nearestVote,
   parseChoice,
   pickExamples,
   resolveChoice,
@@ -77,6 +80,8 @@ export interface KnownExample {
 const SHORTLIST_SIZE = 3;
 /** Exemples pris en compte dans le centre de chaque thème. */
 const EXAMPLES_PER_CENTROID = 5;
+/** Liens rangés par l'utilisateur consultés pour le vote des voisins. */
+const MAX_VOTERS = 60;
 
 export interface Analysis {
   digest: Digest | null;
@@ -260,11 +265,32 @@ export async function analyseBookmark(
     run,
     themeExamples,
   );
-  const themeId = themeChoice.id;
+  // La mémoire des corrections : où l'utilisateur a rangé les liens les plus
+  // proches. Elle tranche quand le modèle hésite ou ne choisit rien.
+  let decided: { id: string | null; confidence: number | null } = themeChoice;
+  if (docVector && known.length > 0) {
+    const neighbours: { vector: number[]; optionId: string }[] = [];
+    for (const e of known.slice(0, MAX_VOTERS)) {
+      const v = await safeEmbed(run, `b:${e.id}`, e.text);
+      if (v && allThemes.some((o) => o.id === e.themeId)) neighbours.push({ vector: v, optionId: e.themeId });
+    }
+    decided = arbitrate(themeChoice, nearestVote(docVector, neighbours), neighbours.length);
+  }
+
+  // Un lien qui ne dit presque rien ne doit pas être rangé en silence : il
+  // passe par « À vérifier », quelle que soit l'assurance du modèle.
+  const thin = isThin(document);
+  const themeId = decided.id;
   const base = {
     digest,
-    confidence: themeChoice.confidence,
-    alternatives: themeChoice.alternatives,
+    confidence: thin ? Math.min(decided.confidence ?? 0.3, 0.3) : decided.confidence,
+    alternatives: [
+      // Choix du modèle écarté par le vote : il reste proposé.
+      ...(themeChoice.id && themeChoice.id !== themeId
+        ? [{ id: themeChoice.id, p: themeChoice.confidence ?? 0 }]
+        : []),
+      ...themeChoice.alternatives.filter((a) => a.id !== themeId),
+    ].slice(0, 2),
     classifiedFrom: document,
   };
   if (!themeId) {

@@ -439,4 +439,33 @@ export const MIGRATIONS: string[] = [
      AND ai_status = 'success'
      AND (theme_source IS NULL OR theme_source <> 'human');
   `,
+
+  // 014 — version 3.2.
+  //
+  // Les liens « Partager » d'Instagram (`/share/reel/…`) étaient lus avec un
+  // faux code de publication, et la session Instagram de l'application
+  // n'était jamais présentée : des publications bien en ligne finissaient
+  // « introuvables », voire « source disparue ». Toutes les publications
+  // Instagram sans média ou sans texte repartent, compteurs remis à zéro.
+  //
+  // Le classement change aussi (vote des liens que l'utilisateur a rangés,
+  // sous-thèmes montrés au modèle) : ce que l'IA avait rangé seule repasse.
+  `
+  UPDATE bookmarks
+     SET fetch_status = 'pending', fetch_attempts = 0, fetch_error = NULL,
+         retry_days = 0, next_fetch_at = NULL, source_gone = 0
+   WHERE archived = 0
+     AND source_kind = 'instagram'
+     AND (
+       fetch_status IN ('error', 'running')
+       OR source_gone = 1
+       OR content IS NULL OR trim(content) = ''
+       OR NOT EXISTS (SELECT 1 FROM assets a WHERE a.bookmark_id = bookmarks.id
+                        AND a.kind IN ('image', 'video'))
+     );
+  UPDATE bookmarks SET ai_status = 'pending', ai_error = NULL
+   WHERE archived = 0
+     AND (theme_source IS NULL OR theme_source <> 'human')
+     AND (ai_status <> 'pending' OR fetch_status = 'pending');
+  `,
 ];

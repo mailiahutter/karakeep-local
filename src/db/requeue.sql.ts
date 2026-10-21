@@ -4,8 +4,9 @@
  * Isolé pour être joué dans les tests contre un vrai SQLite, comme les
  * requêtes des avis.
  *
- * Trois cas pour l'extraction : un échec, un arrêt en plein travail, ou une
- * réussite qui n'a rien rapporté — ni texte ni média, la fiche est vide.
+ * Pour l'extraction : un échec, un arrêt en plein travail, une réussite qui
+ * n'a rien rapporté — ni texte ni média —, une source déclarée disparue, ou
+ * une publication Instagram sans photo ni vidéo.
  * Pour l'analyse : un échec, une étape sautée faute de modèle, un arrêt, ou
  * une réussite à laquelle il manque le rangement, le résumé ou la lecture du
  * sujet. Tout lien dont l'extraction repart est aussi réanalysé : son
@@ -24,6 +25,11 @@ export const REQUEUE_FETCH = `
        OR (fetch_status = 'success'
            AND (content IS NULL OR trim(content) = '')
            AND NOT EXISTS (SELECT 1 FROM assets a WHERE a.bookmark_id = bookmarks.id))
+       OR source_gone = 1
+       -- Une publication Instagram sans photo ni vidéo n'a pas été vraiment lue.
+       OR (source_kind = 'instagram'
+           AND NOT EXISTS (SELECT 1 FROM assets a WHERE a.bookmark_id = bookmarks.id
+                             AND a.kind IN ('image', 'video')))
      )`;
 
 export const REQUEUE_AI = `

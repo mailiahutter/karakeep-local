@@ -69,7 +69,7 @@ object MediaTools {
    * Télécharge les médias d'une adresse dans `dir`. Renvoie les fichiers
    * produits et les métadonnées JSON de yt-dlp (une ligne par élément).
    */
-  fun download(context: Context, url: String, dir: String): Map<String, Any> {
+  fun download(context: Context, url: String, dir: String, cookie: String? = null): Map<String, Any> {
     ensureYtdlp(context)
     val target = File(dir.removePrefix("file://"))
     target.mkdirs()
@@ -86,6 +86,7 @@ object MediaTools {
       .addOption("--max-filesize", "300M")
       .addOption("--socket-timeout", 30)
       .addOption("--retries", 3)
+    if (!cookie.isNullOrBlank()) request.addOption("--add-header", "Cookie:$cookie")
     val response = YoutubeDL.getInstance().execute(request, null, null)
     if (response.exitCode != 0) {
       throw IllegalStateException(response.err.lines().lastOrNull { it.isNotBlank() } ?: "yt-dlp a échoué")

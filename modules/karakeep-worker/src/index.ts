@@ -16,7 +16,8 @@ interface KarakeepWorkerNative {
   scheduledWindow(): { hour: number; minute: number } | null;
   diagnostics(): WorkerDiagnostics;
   recognizeText(path: string): Promise<string>;
-  ytdlpDownload(url: string, dir: string): Promise<{ files: string[]; info: string }>;
+  ytdlpDownload(url: string, dir: string, cookie: string | null): Promise<{ files: string[]; info: string }>;
+  cookieFor(url: string): string | null;
   ytdlpUpdate(): Promise<string>;
   ytdlpVersion(): Promise<string | null>;
   zip(sources: string[], dest: string): Promise<{ path: string; files: number; bytes: number; size: number }>;
@@ -104,9 +105,13 @@ export interface YtdlpResult {
 }
 
 /** Téléchargement par yt-dlp dans `dir`. Lève une erreur en cas d'échec. */
-export async function ytdlpDownload(url: string, dir: string): Promise<YtdlpResult> {
+export async function ytdlpDownload(
+  url: string,
+  dir: string,
+  cookie: string | null = null,
+): Promise<YtdlpResult> {
   if (!hasMediaTools()) throw new Error("yt-dlp absent de cette version");
-  const raw = await native!.ytdlpDownload(url, dir);
+  const raw = await native!.ytdlpDownload(url, dir, cookie);
   const info: Record<string, unknown>[] = [];
   for (const line of raw.info.split("\n")) {
     const trimmed = line.trim();
@@ -141,4 +146,13 @@ export async function zipFiles(
 ): Promise<{ path: string; files: number; bytes: number; size: number }> {
   if (typeof native?.zip !== "function") throw new Error("Sauvegarde indisponible dans cette version");
   return native.zip(sources, dest);
+}
+
+/** Cookies de la WebView pour cette adresse (session Instagram), ou `null`. */
+export function cookieFor(url: string): string | null {
+  try {
+    return typeof native?.cookieFor === "function" ? native.cookieFor(url) || null : null;
+  } catch {
+    return null;
+  }
 }
