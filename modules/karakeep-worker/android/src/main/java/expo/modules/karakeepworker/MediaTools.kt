@@ -154,4 +154,144 @@ object MediaTools {
     }
     return mapOf("path" to out.absolutePath, "files" to files, "bytes" to bytes.toDouble(), "size" to out.length().toDouble())
   }
+
+  // --- Vidéo : images-clés et son ------------------------------------------
+
+  /**
+   * Images réparties dans la vidéo (en évitant le tout début et la fin, où
+   * l'on trouve écrans titres et appels à s'abonner), réduites à 768 px.
+   */
+  fun extractFrames(videoPath: String, count: Int, outDir: String): List<String> {
+    val retriever = android.media.MediaMetadataRetriever()
+    val out = mutableListOf<String>()
+    try {
+      retriever.setDataSource(videoPath.removePrefix("file://"))
+      val durationMs = retriever
+        .extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)
+        ?.toLongOrNull() ?: 0L
+      val dir = File(outDir.removePrefix("file://")).apply { mkdirs() }
+      for (i in 1..count) {
+        val atUs = if (durationMs > 0) durationMs * 1000L * i / (count + 1) else 0L
+        val frame = retriever.getFrameAtTime(atUs, android.media.MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+          ?: continue
+        val scale = 768f / maxOf(frame.width, frame.height).coerceAtLeast(1)
+        val bitmap = if (scale < 1f) {
+          android.graphics.Bitmap.createScaledBitmap(
+            frame,
+            (frame.width * scale).toInt().coerceAtLeast(1),
+            (frame.height * scale).toInt().coerceAtLeast(1),
+            true,
+          )
+        } else frame
+        val file = File(dir, "frame_$i.jpg")
+        FileOutputStream(file).use { bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 85, it) }
+        out.add(file.absolutePath)
+      }
+    } finally {
+      retriever.release()
+    }
+    return out
+  }
+
+  /**
+   * Piste son de la vidéo, décodée en WAV 16 kHz mono — le format attendu
+   * par le modèle — et limitée à `maxSeconds`. `null` si la vidéo est muette.
+   */
+  fun extractAudio(videoPath: String, outPath: String, maxSeconds: Int): String? {
+    val extractor = android.media.MediaExtractor()
+    extractor.setDataSource(videoPath.removePrefix("file://"))
+    var track = -1
+    for (i in 0 until extractor.trackCount) {
+      val mime = extractor.getTrackFormat(i).getString(android.media.MediaFormat.KEY_MIME) ?: continue
+      if (mime.startsWith("audio/")) { track = i; break }
+    }
+    if (track < 0) { extractor.release(); return null }
+    extractor.selectTrack(track)
+    val format = extractor.getTrackFormat(track)
+    val codec = android.media.MediaCodec.createDecoderByType(format.getString(android.media.MediaFormat.KEY_MIME)!!)
+    codec.configure(format, null, null, 0)
+    codec.start()
+
+    val target = 16_000
+    val maxSamples = target * maxSeconds
+    val mono = java.io.ByteArrayOutputStream()
+    var written = 0
+    var sampleRate = format.getInteger(android.media.MediaFormat.KEY_SAMPLE_RATE)
+    var channels = format.getInteger(android.media.MediaFormat.KEY_CHANNEL_COUNT)
+    var floatPcm = false
+    var position = 0.0
+    val info = android.media.MediaCodec.BufferInfo()
+    var inputDone = false
+    var outputDone = false
+    try {
+      while (!outputDone && written < maxSamples) {
+        if (!inputDone) {
+          val inIndex = codec.dequeueInputBuffer(10_000)
+          if (inIndex >= 0) {
+            val buffer = codec.getInputBuffer(inIndex)!!
+            val size = extractor.readSampleData(buffer, 0)
+            if (size < 0) {
+              codec.queueInputBuffer(inIndex, 0, 0, 0, android.media.MediaCodec.BUFFER_FLAG_END_OF_STREAM)
+              inputDone = true
+            } else {
+              codec.queueInputBuffer(inIndex, 0, size, extractor.sampleTime, 0)
+              extractor.advance()
+            }
+          }
+        }
+        val outIndex = codec.dequeueOutputBuffer(info, 10_000)
+        if (outIndex == android.media.MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
+          val f = codec.outputFormat
+          sampleRate = f.getInteger(android.media.MediaFormat.KEY_SAMPLE_RATE)
+          channels = f.getInteger(android.media.MediaFormat.KEY_CHANNEL_COUNT)
+          floatPcm = f.containsKey(android.media.MediaFormat.KEY_PCM_ENCODING) &&
+            f.getInteger(android.media.MediaFormat.KEY_PCM_ENCODING) == android.media.AudioFormat.ENCODING_PCM_FLOAT
+        } else if (outIndex >= 0) {
+          val buffer = codec.getOutputBuffer(outIndex)!!
+          buffer.position(info.offset)
+          buffer.limit(info.offset + info.size)
+          buffer.order(java.nio.ByteOrder.LITTLE_ENDIAN)
+          val frameBytes = (if (floatPcm) 4 else 2) * channels
+          val frames = info.size / frameBytes
+          val step = sampleRate.toDouble() / target
+          // Rééchantillonnage au plus proche : suffisant pour de la parole.
+          while (position < frames && written < maxSamples) {
+            val base = info.offset + position.toInt() * frameBytes
+            var sum = 0.0
+            for (c in 0 until channels) {
+              sum += if (floatPcm) buffer.getFloat(base + c * 4).toDouble()
+              else buffer.getShort(base + c * 2) / 32768.0
+            }
+            val v = (sum / channels).coerceIn(-1.0, 1.0)
+            val s16 = (v * 32767).toInt()
+            mono.write(s16 and 0xff)
+            mono.write((s16 shr 8) and 0xff)
+            written++
+            position += step
+          }
+          position -= frames
+          codec.releaseOutputBuffer(outIndex, false)
+          if (info.flags and android.media.MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) outputDone = true
+        }
+      }
+    } finally {
+      codec.stop()
+      codec.release()
+      extractor.release()
+    }
+    if (written < target) return null // moins d'une seconde : rien à écouter
+    val data = mono.toByteArray()
+    val file = File(outPath.removePrefix("file://"))
+    file.parentFile?.mkdirs()
+    FileOutputStream(file).use { out ->
+      val header = java.nio.ByteBuffer.allocate(44).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+      header.put("RIFF".toByteArray()).putInt(36 + data.size).put("WAVE".toByteArray())
+      header.put("fmt ".toByteArray()).putInt(16).putShort(1).putShort(1)
+        .putInt(target).putInt(target * 2).putShort(2).putShort(16)
+      header.put("data".toByteArray()).putInt(data.size)
+      out.write(header.array())
+      out.write(data)
+    }
+    return file.absolutePath
+  }
 }

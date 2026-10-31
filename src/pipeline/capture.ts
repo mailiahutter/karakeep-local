@@ -31,6 +31,7 @@ import { isNetworkFailure } from "./retry";
 import { summarizeYtdlp, type LocalMedia } from "../archive/ytdlpInfo";
 import { connectionKind } from "../ai/download";
 import { setOcrText } from "../db/ocr";
+import { resetPerception } from "./perceive";
 import { cookieFor, hasMediaTools, ytdlpDownload } from "../../modules/karakeep-worker/src";
 import * as FileSystem from "expo-file-system/legacy";
 
@@ -448,8 +449,10 @@ export async function captureBookmark(
   const fresh = outcome.images + outcome.videos + (outcome.screenshot ? 1 : 0) + (outcome.archive ? 1 : 0);
   if (fresh > 0) {
     await deleteAssets(previous);
-    // Nouvelles images : leur texte sera relu avant la prochaine analyse.
+    // Nouvelles images : leur texte sera relu, et elles seront regardées de
+    // nouveau, avant la prochaine analyse.
     await setOcrText(bookmarkId, null);
+    await resetPerception(bookmarkId);
   }
 
   const hasText = !!source.description || content.trim().length > 0;

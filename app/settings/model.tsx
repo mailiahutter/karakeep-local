@@ -15,6 +15,7 @@ import {
   type ModelDownload,
 } from "../../src/ai/download";
 import { releaseModel } from "../../src/ai/llm";
+import { projectorDescriptor } from "../../src/ai/models";
 import { EMBEDDING_MODEL, isEmbedderInstalled, releaseEmbedder } from "../../src/ai/embed";
 import {
   MODELS,
@@ -50,7 +51,9 @@ export default function ModelScreen() {
     const state: Record<string, boolean> = {};
     const partial: Record<string, number> = {};
     for (const model of MODELS) {
-      state[model.id] = await isModelInstalled(model);
+      const projector = projectorDescriptor(model);
+      state[model.id] =
+        (await isModelInstalled(model)) && (!projector || (await isModelInstalled(projector)));
       // Un transfert interrompu laisse des octets acquis : ils seront repris,
       // pas retéléchargés.
       if (!state[model.id]) partial[model.id] = await partialBytes(model);
@@ -118,6 +121,19 @@ export default function ModelScreen() {
       activeDownload.current = task;
       try {
         await task.promise;
+        // Le projecteur (vision et son) se télécharge à la suite.
+        const projector = projectorDescriptor(model);
+        if (projector && !(await isModelInstalled(projector))) {
+          const second = await downloadModel(
+            projector,
+            ({ ratio, written, total }) => {
+              setDownload({ modelId: model.id, ratio, written, total, resumed: false });
+            },
+            { allowCellular },
+          );
+          activeDownload.current = second;
+          await second.promise;
+        }
         await saveSetting("modelPath", modelPathFor(model));
         await saveSetting("modelId", model.id);
         await refresh();
@@ -159,6 +175,8 @@ export default function ModelScreen() {
                 // avant d'effacer évite un fichier fantôme.
                 await releaseModel();
                 await deleteModel(model);
+                const projector = projectorDescriptor(model);
+                if (projector) await deleteModel(projector);
                 await refresh();
               })();
             },

@@ -483,4 +483,21 @@ export const MIGRATIONS: string[] = [
   ALTER TABLE subthemes ADD COLUMN learned_criteria TEXT;
   ALTER TABLE subthemes ADD COLUMN learned_from INTEGER NOT NULL DEFAULT 0;
   `,
+
+  // 016 — version 3.4 : l'IA regarde et écoute.
+  //
+  // `media_description` : ce que le modèle multimodal a vu dans les photos et
+  // les images-clés des vidéos, et entendu dans leur son. NULL tant que ce
+  // n'est pas fait, chaîne vide quand il n'y avait rien à regarder.
+  //
+  // Les fiches qui ont des images ou des vidéos repassent à l'analyse — sauf
+  // celles rangées à la main — pour en profiter.
+  `
+  ALTER TABLE bookmarks ADD COLUMN media_description TEXT;
+  UPDATE bookmarks SET ai_status = 'pending', ai_error = NULL
+   WHERE archived = 0
+     AND (theme_source IS NULL OR theme_source <> 'human')
+     AND EXISTS (SELECT 1 FROM assets a WHERE a.bookmark_id = bookmarks.id
+                   AND a.kind IN ('image', 'video'));
+  `,
 ];

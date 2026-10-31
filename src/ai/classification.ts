@@ -12,6 +12,7 @@ import {
   pickExamples,
   resolveChoice,
   shortlist,
+  shuffleOptions,
   SUGGEST_JSON_SCHEMA,
   SUGGEST_SYSTEM_PROMPT,
   buildSuggestPrompt,
@@ -182,6 +183,7 @@ async function choose(
   examples: ClassifyExample[],
 ): Promise<Choice> {
   if (options.length === 0) return { id: null, confidence: null, alternatives: [] };
+  options = shuffleOptions(options, document);
   let probs: TokenProbs[] | null = null;
   const raw = await complete(run.modelPath, {
     system: CLASSIFY_SYSTEM_PROMPT,

@@ -254,3 +254,16 @@ test("les critères appris sont montrés sous la catégorie", () => {
   const prompt = buildChoicePrompt(buildThemeOptions(tree), "x", "Aucune");
   assert.match(prompt, /1\. Chien — Tout pour le chien\.\n   D'après ses rangements : Harnais, laisses ; pas la nourriture\./);
 });
+
+test("l'ordre des tiroirs change d'un lien à l'autre, pas d'une fois à l'autre", async () => {
+  const { shuffleOptions } = await import("./classify.ts");
+  const options = buildThemeOptions(
+    Array.from({ length: 8 }, (_, i) => ({ id: `t${i}`, name: `T${i}`, subthemes: [] })),
+  );
+  const a = shuffleOptions(options, "lien A").map((o) => o.id);
+  assert.deepEqual(shuffleOptions(options, "lien A").map((o) => o.id), a);
+  const firsts = new Set(["a", "b", "c", "d", "e", "f", "g", "h"].map((s) => shuffleOptions(options, s)[0].id));
+  assert.ok(firsts.size >= 4, "le premier tiroir doit varier");
+  assert.deepEqual(shuffleOptions(options, "x").map((o) => o.index), [1, 2, 3, 4, 5, 6, 7, 8]);
+  assert.deepEqual([...a].sort(), options.map((o) => o.id).sort());
+});

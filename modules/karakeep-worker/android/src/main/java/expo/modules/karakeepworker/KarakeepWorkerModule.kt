@@ -119,6 +119,20 @@ class KarakeepWorkerModule : Module() {
       android.webkit.CookieManager.getInstance().getCookie(url)
     }
 
+    /** Images-clés d'une vidéo, pour que le modèle la « regarde ». */
+    AsyncFunction("extractFrames") { videoPath: String, count: Int, outDir: String, promise: Promise ->
+      MediaTools.background({ MediaTools.extractFrames(videoPath, count, outDir) }) { r ->
+        r.fold({ promise.resolve(it) }, { promise.reject("ERR_FRAMES", it.message ?: "Images impossibles", it) })
+      }
+    }
+
+    /** Son d'une vidéo en WAV 16 kHz mono, pour que le modèle l'« écoute ». */
+    AsyncFunction("extractAudio") { videoPath: String, outPath: String, maxSeconds: Int, promise: Promise ->
+      MediaTools.background({ MediaTools.extractAudio(videoPath, outPath, maxSeconds) }) { r ->
+        r.fold({ promise.resolve(it) }, { promise.reject("ERR_AUDIO", it.message ?: "Son impossible", it) })
+      }
+    }
+
     /** Archive ZIP pour la sauvegarde. */
     AsyncFunction("zip") { sources: List<String>, dest: String, promise: Promise ->
       MediaTools.background({ MediaTools.zip(sources, dest) }) { r ->

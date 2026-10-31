@@ -35,7 +35,7 @@ export interface Settings {
 export const DEFAULT_SETTINGS: Settings = {
   aiLanguage: "français",
   tagStyle: "lowercase-hyphens",
-  modelId: "qwen3-4b-instruct-2507-q4km",
+  modelId: "gemma-4-e2b-it-q4",
   modelPath: "",
   autoTag: true,
   autoFetch: true,

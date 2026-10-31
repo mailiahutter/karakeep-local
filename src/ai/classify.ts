@@ -413,3 +413,29 @@ export function isThin(document: string): boolean {
     .trim();
   return body.length < 40;
 }
+
+// --- Ordre des options --------------------------------------------------
+
+/**
+ * Mélange les options selon une graine, et les renumérote.
+ *
+ * Un petit modèle qui hésite répond volontiers le premier numéro de la
+ * liste : « tout tombe dans Bijou » venait en partie de là, le même tiroir
+ * étant toujours présenté en tête. Un ordre qui change d'un lien à l'autre
+ * — mais reste le même pour un lien donné, pour que le résultat soit
+ * reproductible — dilue ce biais au lieu de le concentrer sur un tiroir.
+ */
+export function shuffleOptions(options: ClassifyOption[], seed: string): ClassifyOption[] {
+  let state = 0;
+  for (let i = 0; i < seed.length; i++) state = (Math.imul(state, 31) + seed.charCodeAt(i)) >>> 0;
+  const next = () => {
+    state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+    return state / 0x100000000;
+  };
+  const out = [...options];
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(next() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out.map((o, i) => ({ ...o, index: i + 1 }));
+}

@@ -18,6 +18,8 @@ const CONTEXT_SIZE = 4096;
 interface LoadedContext {
   ctx: LlamaContext;
   modelPath: string;
+  /** Projecteur multimodal chargé : le modèle peut regarder et écouter. */
+  multimodal: boolean;
 }
 
 let loaded: LoadedContext | null = null;
@@ -35,6 +37,8 @@ function scheduleRelease(): void {
 
 export interface LoadOptions {
   onProgress?: (percent: number) => void;
+  /** Fichier `mmproj` à charger pour les images et le son. */
+  projectorPath?: string;
 }
 
 async function load(
@@ -54,7 +58,7 @@ async function load(
     },
     (percent) => opts.onProgress?.(percent),
   );
-  return { ctx, modelPath };
+  return { ctx, modelPath, multimodal: false };
 }
 
 /**
@@ -67,6 +71,7 @@ export async function getContext(
 ): Promise<LlamaContext> {
   if (loaded && loaded.modelPath === modelPath) {
     scheduleRelease();
+    await ensureMultimodal(loaded, opts);
     return loaded.ctx;
   }
   // Modèle différent de celui en mémoire : on repart de zéro.
@@ -86,7 +91,25 @@ export async function getContext(
     });
 
   const result = await loading;
+  await ensureMultimodal(result, opts);
   return result.ctx;
+}
+
+/**
+ * Charge le projecteur à la première demande qui en a besoin. Le
+ * classement, lui, n'en a pas besoin : on n'alourdit pas la mémoire pour
+ * rien.
+ */
+async function ensureMultimodal(current: LoadedContext, opts: LoadOptions): Promise<void> {
+  if (!opts.projectorPath || current.multimodal) return;
+  current.multimodal = await current.ctx.initMultimodal({
+    path: opts.projectorPath,
+    // Le processeur, comme pour le modèle : le GPU est inégal selon les
+    // pilotes Android.
+    use_gpu: false,
+    // Assez pour lire une affiche ou une recette, sans exploser la mémoire.
+    image_max_tokens: 280,
+  });
 }
 
 export async function releaseModel(): Promise<void> {
@@ -131,6 +154,10 @@ export interface CompletionOptions {
    */
   nProbs?: number;
   onProbabilities?: (probs: TokenProbs[]) => void;
+  /** Images jointes (chemins locaux), quand le projecteur est chargé. */
+  images?: string[];
+  /** Son joint (WAV), quand le projecteur est chargé. */
+  audio?: string | null;
 }
 
 export interface TokenProbs {
@@ -193,8 +220,11 @@ export async function complete(
       {
         messages: [
           { role: "system", content: options.system },
-          { role: "user", content: options.prompt },
+          { role: "user", content: userContent(options) },
         ],
+        // Les modèles récents savent « réfléchir » avant de répondre : utile
+        // ailleurs, ruineux ici, et cela casserait la lecture d'un numéro.
+        enable_thinking: false,
         n_predict: options.maxTokens ?? 256,
         // Température basse : le tagging doit être stable d'une exécution à l'autre.
         temperature: 0.2,
@@ -305,4 +335,21 @@ async function raceStop(
   } finally {
     if (timer) clearTimeout(timer);
   }
+}
+
+function fileUrl(path: string): string {
+  return path.startsWith("file://") ? path : `file://${path}`;
+}
+
+/** Texte seul, ou texte accompagné d'images et de son. */
+function userContent(options: CompletionOptions) {
+  const images = options.images ?? [];
+  if (images.length === 0 && !options.audio) return options.prompt;
+  return [
+    ...images.map((p) => ({ type: "image_url", image_url: { url: fileUrl(p) } })),
+    ...(options.audio
+      ? [{ type: "input_audio", input_audio: { format: "wav", url: fileUrl(options.audio) } }]
+      : []),
+    { type: "text", text: options.prompt },
+  ];
 }

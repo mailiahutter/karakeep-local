@@ -35,9 +35,51 @@ export interface ModelDescriptor {
   /** Nom du fichier une fois enregistré sur l'appareil. */
   fileName: string;
   notes: string;
+  /**
+   * Projecteur multimodal (fichier `mmproj`) : ce qui permet au modèle de
+   * regarder des images et d'écouter du son. Téléchargé à côté du modèle.
+   */
+  projector?: { url: string; fileName: string; bytes: number };
+  /** Ce que le modèle sait percevoir en plus du texte. */
+  senses?: ("image" | "audio")[];
 }
 
 export const MODELS: ModelDescriptor[] = [
+  {
+    id: "gemma-4-e2b-it-q4",
+    label: "Gemma 4 E2B — voit et écoute",
+    bytes: 2_841_481_184,
+    ramHint: "8 Go et plus",
+    speedHint: "environ 2 à 4 min par lien, images et son compris",
+    url: "https://huggingface.co/ggml-org/gemma-4-E2B-it-GGUF/resolve/main/gemma-4-E2B-it-Q4_0.gguf",
+    fileName: "gemma-4-E2B-it-Q4_0.gguf",
+    projector: {
+      url: "https://huggingface.co/ggml-org/gemma-4-E2B-it-GGUF/resolve/main/mmproj-gemma-4-E2B-it-Q8_0.gguf",
+      fileName: "mmproj-gemma-4-E2B-it-Q8_0.gguf",
+      bytes: 557_368_064,
+    },
+    senses: ["image", "audio"],
+    notes:
+      "Le choix par défaut depuis la 3.4 (Google, 2026) : il regarde les photos et les images-clés des vidéos, et écoute leur son. Une publication à la légende vide ou trompeuse est rangée d'après ce qu'elle montre et ce qu'on y dit. Plus de 140 langues.",
+  },
+  {
+    id: "gemma-4-e4b-it-q4",
+    label: "Gemma 4 E4B — voit et écoute, plus fin",
+    bytes: 4_590_807_392,
+    ramHint: "12 Go et plus",
+    speedHint: "environ 4 à 8 min par lien",
+    heavy: true,
+    url: "https://huggingface.co/ggml-org/gemma-4-E4B-it-GGUF/resolve/main/gemma-4-E4B-it-Q4_0.gguf",
+    fileName: "gemma-4-E4B-it-Q4_0.gguf",
+    projector: {
+      url: "https://huggingface.co/ggml-org/gemma-4-E4B-it-GGUF/resolve/main/mmproj-gemma-4-E4B-it-Q8_0.gguf",
+      fileName: "mmproj-gemma-4-E4B-it-Q8_0.gguf",
+      bytes: 559_874_816,
+    },
+    senses: ["image", "audio"],
+    notes:
+      "Même famille, deux fois plus de paramètres actifs : comprend mieux, mais demande un téléphone haut de gamme et beaucoup plus de temps.",
+  },
   {
     id: "qwen3-4b-instruct-2507-q4km",
     label: "Qwen 3 4B Instruct (2507)",
@@ -47,7 +89,7 @@ export const MODELS: ModelDescriptor[] = [
     url: "https://huggingface.co/bartowski/Qwen_Qwen3-4B-Instruct-2507-GGUF/resolve/main/Qwen_Qwen3-4B-Instruct-2507-Q4_K_M.gguf",
     fileName: "Qwen_Qwen3-4B-Instruct-2507-Q4_K_M.gguf",
     notes:
-      "Le meilleur choix par défaut depuis la 3.3 : une génération plus récente, nettement plus juste que Qwen 2.5 3B pour comprendre et ranger, pour un coût à peine plus élevé. Multilingue, respecte les formats imposés.",
+      "Texte seulement : bon pour ranger d'après la légende, aveugle aux images et sourd aux vidéos.",
   },
   {
     id: "qwen2.5-7b-instruct-q4km",
@@ -121,5 +163,19 @@ export function formatBytes(bytes: number): string {
 }
 
 /** Modèle recommandé, et ceux qu'il remplace sans demander. */
-export const RECOMMENDED_MODEL_ID = "qwen3-4b-instruct-2507-q4km";
-export const SUPERSEDED_MODEL_IDS = ["qwen2.5-3b-instruct-q4km"];
+export const RECOMMENDED_MODEL_ID = "gemma-4-e2b-it-q4";
+export const SUPERSEDED_MODEL_IDS = ["qwen2.5-3b-instruct-q4km", "qwen3-4b-instruct-2507-q4km"];
+
+/** Le projecteur d'un modèle, sous la forme d'un téléchargement à part entière. */
+export function projectorDescriptor(model: ModelDescriptor): ModelDescriptor | null {
+  if (!model.projector) return null;
+  return {
+    ...model,
+    id: `${model.id}-mmproj`,
+    label: `${model.label} (vision et son)`,
+    url: model.projector.url,
+    fileName: model.projector.fileName,
+    bytes: model.projector.bytes,
+    projector: undefined,
+  };
+}

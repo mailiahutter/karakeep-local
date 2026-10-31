@@ -36,6 +36,8 @@ import { loadSettings } from "../db/settings";
 import { listClassificationExamples } from "../db/examples";
 import { withOcr } from "../archive/ocrText";
 import { ensureOcr } from "./ocr";
+import { ensurePerception } from "./perceive";
+import { withPerception } from "../ai/perception";
 import { refreshYtdlpWeekly } from "./ytdlpUpdate";
 import { saveClassificationMeta } from "../db/verify";
 import { embed, embedCached, ensureEmbedderDownloaded } from "../ai/embed";
@@ -216,6 +218,13 @@ async function runTagStage(deadline: () => boolean): Promise<number> {
       // question à vingt et une options. Le rangement est ce que
       // l'utilisateur vient chercher : il passe avant le résumé, qui ne
       // s'exécute que s'il reste du temps.
+      // Ce que disent la légende, le texte des images, et — si le modèle sait
+      // regarder et écouter — ce que montrent les photos et la vidéo.
+      const perception = await ensurePerception(bookmark, model, AI_TIMEOUTS.summary).catch(() => null);
+      const enriched = withPerception(
+        withOcr(bookmark.content, await ensureOcr(bookmark.id).catch(() => null)),
+        perception,
+      );
       const themes = await listThemes();
       const analysis = await analyseBookmark(
         themes.map((t) => ({
@@ -236,7 +245,7 @@ async function runTagStage(deadline: () => boolean): Promise<number> {
         {
           title: bookmark.title,
           description: bookmark.description,
-          content: withOcr(bookmark.content, await ensureOcr(bookmark.id).catch(() => null)),
+          content: enriched,
           url: bookmark.url,
           language: settings.aiLanguage,
           tagStyle: settings.tagStyle,
@@ -285,7 +294,7 @@ async function runTagStage(deadline: () => boolean): Promise<number> {
       await beat();
       // Le résumé en dernier : c'est la réponse la plus longue à produire,
       // donc la seule qu'on puisse sacrifier sans perdre l'essentiel.
-      const content = bookmark.content ?? "";
+      const content = enriched ?? "";
       const elapsed = Date.now() - startedAt;
       const worthSummarising =
         content.trim().length >= MIN_CONTENT_FOR_SUMMARY &&

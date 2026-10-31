@@ -6,13 +6,14 @@ import {
   isModelInstalled,
   modelPathFor,
 } from "./download";
-import { RECOMMENDED_MODEL_ID, SUPERSEDED_MODEL_IDS, findModel } from "./models";
+import { RECOMMENDED_MODEL_ID, SUPERSEDED_MODEL_IDS, findModel, projectorDescriptor } from "./models";
 import { loadSettings, saveSetting } from "../db/settings";
 
 /**
  * Passage automatique au modèle recommandé.
  *
- * Demande du 21 octobre : « il faut une IA plus puissante ». L'utilisateur
+ * Demandes du 21 et du 31 octobre : « il faut une IA plus puissante »,
+ * « même avec de la lecture d'image, de vidéo, de son ». L'utilisateur
  * n'ouvre presque jamais l'application ; attendre qu'il aille dans les
  * réglages, c'était ne jamais changer. Si l'ancien modèle par défaut est en
  * service, le nouveau se télécharge seul en Wi-Fi (le gestionnaire système
@@ -29,7 +30,10 @@ export async function upgradeModelIfNeeded(): Promise<void> {
     const target = findModel(RECOMMENDED_MODEL_ID);
     if (!target) return;
 
-    if (await isModelInstalled(target)) {
+    const projector = projectorDescriptor(target);
+    const ready =
+      (await isModelInstalled(target)) && (!projector || (await isModelInstalled(projector)));
+    if (ready) {
       const old = findModel(settings.modelId);
       await releaseModel();
       await saveSetting("modelId", target.id);
@@ -38,8 +42,13 @@ export async function upgradeModelIfNeeded(): Promise<void> {
       return;
     }
     if ((await connectionKind()) !== "wifi") return;
-    const task = await downloadModel(target, () => {});
-    task.promise.catch(() => {});
+    // Les deux fichiers : le gestionnaire système les enchaîne, et ne double
+    // jamais un transfert déjà en cours.
+    for (const file of [target, projector]) {
+      if (!file || (await isModelInstalled(file))) continue;
+      const task = await downloadModel(file, () => {});
+      task.promise.catch(() => {});
+    }
   } catch {
     // Retenté au prochain cycle.
   }

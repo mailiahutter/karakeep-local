@@ -19,6 +19,8 @@ interface KarakeepWorkerNative {
   recognizeText(path: string): Promise<string>;
   ytdlpDownload(url: string, dir: string, cookie: string | null): Promise<{ files: string[]; info: string }>;
   cookieFor(url: string): string | null;
+  extractFrames(videoPath: string, count: number, outDir: string): Promise<string[]>;
+  extractAudio(videoPath: string, outPath: string, maxSeconds: number): Promise<string | null>;
   ytdlpUpdate(): Promise<string>;
   ytdlpVersion(): Promise<string | null>;
   zip(sources: string[], dest: string): Promise<{ path: string; files: number; bytes: number; size: number }>;
@@ -172,4 +174,16 @@ export function cookieFor(url: string): string | null {
   } catch {
     return null;
   }
+}
+
+/** Images-clés d'une vidéo ; liste vide si indisponible. */
+export async function extractFrames(videoPath: string, count: number, outDir: string): Promise<string[]> {
+  if (typeof native?.extractFrames !== "function") return [];
+  return native.extractFrames(videoPath, count, outDir);
+}
+
+/** Son d'une vidéo en WAV 16 kHz mono ; `null` si muette ou indisponible. */
+export async function extractAudio(videoPath: string, outPath: string, maxSeconds: number): Promise<string | null> {
+  if (typeof native?.extractAudio !== "function") return null;
+  return native.extractAudio(videoPath, outPath, maxSeconds);
 }
