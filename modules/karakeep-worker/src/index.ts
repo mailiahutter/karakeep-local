@@ -10,6 +10,12 @@ import { requireOptionalNativeModule } from "expo";
 interface KarakeepWorkerNative {
   start(kind?: string | null): void;
   scheduleDayPasses(enabled: boolean): number;
+  isCharging(): boolean;
+  modeStatus(): ModeStatus;
+  requestModePermission(): boolean;
+  setModeActive(active: boolean): boolean;
+  setModeAuto(auto: boolean): void;
+  requestAddTile(): boolean;
   stop(): void;
   isRunning(): boolean;
   scheduleDaily(hour: number, minute: number): number;
@@ -186,4 +192,52 @@ export async function extractFrames(videoPath: string, count: number, outDir: st
 export async function extractAudio(videoPath: string, outPath: string, maxSeconds: number): Promise<string | null> {
   if (typeof native?.extractAudio !== "function") return null;
   return native.extractAudio(videoPath, outPath, maxSeconds);
+}
+
+/** Branché sur secteur ? Faux si on ne sait pas : l'analyse ne part pas au hasard. */
+export function isCharging(): boolean {
+  try {
+    return typeof native?.isCharging === "function" ? native.isCharging() : false;
+  } catch {
+    return false;
+  }
+}
+
+// --- Mode Karakeep : internet pour Karakeep seulement -------------------------
+
+export interface ModeStatus {
+  /** L'utilisateur a autorisé l'application à être le VPN du téléphone. */
+  permitted: boolean;
+  active: boolean;
+  /** Activé seul à l'heure de la séance de nuit, coupé à 7 h. */
+  auto: boolean;
+}
+
+export function modeStatus(): ModeStatus | null {
+  try {
+    return typeof native?.modeStatus === "function" ? native.modeStatus() : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Ouvre la fenêtre d'autorisation d'Android ; faux si déjà accordée. */
+export function requestModePermission(): boolean {
+  return native?.requestModePermission?.() ?? false;
+}
+
+export function setModeActive(active: boolean): boolean {
+  return native?.setModeActive?.(active) ?? false;
+}
+
+export function setModeAuto(auto: boolean): void {
+  native?.setModeAuto?.(auto);
+}
+
+export function requestAddTile(): boolean {
+  try {
+    return native?.requestAddTile?.() ?? false;
+  } catch {
+    return false;
+  }
 }

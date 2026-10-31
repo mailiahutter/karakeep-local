@@ -78,6 +78,66 @@ object AlarmScheduler {
     Preferences.clearWindow(context)
   }
 
+  // --- Nouvel essai de nuit, en attendant le secteur -----------------------
+
+  const val EXTRA_RETRY = "retry"
+  private const val RETRY_REQUEST_CODE = 4714
+  private const val RETRY_DELAY_MS = 30L * 60L * 1000L
+  /** Au-delà de 6 h, inutile : la séance n'aurait plus le temps de rien. */
+  private const val RETRY_LAST_HOUR = 6
+
+  /** Programme un nouvel essai dans une demi-heure ; faux s'il est trop tard. */
+  fun scheduleNightRetry(context: Context): Boolean {
+    val at = System.currentTimeMillis() + RETRY_DELAY_MS
+    val hour = Calendar.getInstance().apply { timeInMillis = at }.get(Calendar.HOUR_OF_DAY)
+    val window = Preferences.readWindow(context)
+    // Fenêtre de nuit : de l'heure choisie jusqu'à 6 h (en passant minuit si besoin).
+    val inNight = if (window != null && window.first > RETRY_LAST_HOUR) {
+      hour >= window.first || hour < RETRY_LAST_HOUR
+    } else {
+      hour < RETRY_LAST_HOUR
+    }
+    if (!inNight) return false
+    val intent = PendingIntent.getBroadcast(
+      context,
+      RETRY_REQUEST_CODE,
+      Intent(context, AlarmReceiver::class.java)
+        .putExtra(WorkerService.EXTRA_KIND, WorkerService.KIND_NIGHT)
+        .putExtra(EXTRA_RETRY, true),
+      PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+    )
+    val manager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+    try {
+      if (canScheduleExact(context)) manager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, intent)
+      else manager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, intent)
+    } catch (e: SecurityException) {
+      manager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, intent)
+    }
+    return true
+  }
+
+  // --- Fin du mode Karakeep automatique, le matin --------------------------
+
+  private const val MORNING_REQUEST_CODE = 4715
+  const val MORNING_HOUR = 7
+
+  fun scheduleMorning(context: Context) {
+    val at = nextOccurrence(MORNING_HOUR, 0)
+    val intent = PendingIntent.getBroadcast(
+      context,
+      MORNING_REQUEST_CODE,
+      Intent(context, AlarmReceiver::class.java).putExtra(WorkerService.EXTRA_KIND, WorkerService.KIND_MORNING),
+      PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+    )
+    val manager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+    try {
+      if (canScheduleExact(context)) manager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, intent)
+      else manager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, intent)
+    } catch (e: SecurityException) {
+      manager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, intent)
+    }
+  }
+
   // --- Passages de jour ------------------------------------------------------
 
   private const val DAY_REQUEST_CODE = 4713
@@ -167,6 +227,24 @@ object Preferences {
 
   fun isDayEnabled(context: Context): Boolean =
     context.getSharedPreferences(FILE, Context.MODE_PRIVATE).getBoolean(DAY_ENABLED, false)
+
+  private const val MODE_ACTIVE = "karakeep-mode-active"
+  private const val MODE_AUTO = "karakeep-mode-auto"
+
+  fun saveModeActive(context: Context, active: Boolean) {
+    context.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit().putBoolean(MODE_ACTIVE, active).apply()
+  }
+
+  fun isModeActive(context: Context): Boolean =
+    context.getSharedPreferences(FILE, Context.MODE_PRIVATE).getBoolean(MODE_ACTIVE, false)
+
+  /** Mode Karakeep activé seul de l'heure de la séance jusqu'au matin. */
+  fun saveModeAuto(context: Context, auto: Boolean) {
+    context.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit().putBoolean(MODE_AUTO, auto).apply()
+  }
+
+  fun isModeAuto(context: Context): Boolean =
+    context.getSharedPreferences(FILE, Context.MODE_PRIVATE).getBoolean(MODE_AUTO, false)
 
   private const val LAST_ALARM = "last-alarm"
 

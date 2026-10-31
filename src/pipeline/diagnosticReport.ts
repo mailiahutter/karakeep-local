@@ -6,7 +6,7 @@ import { isEmbedderInstalled } from "../ai/embed";
 import { readBackgroundLog } from "./heartbeat";
 import { connectionKind } from "../ai/download";
 import { currentBuild, currentVersion } from "../update/updater";
-import { scheduledWindow, workerDiagnostics, isWorkerAvailable } from "../../modules/karakeep-worker/src";
+import { isCharging, modeStatus, scheduledWindow, workerDiagnostics, isWorkerAvailable } from "../../modules/karakeep-worker/src";
 
 /**
  * Journal à transmettre pour comprendre pourquoi rien n'avance.
@@ -53,7 +53,11 @@ export async function buildDiagnosticReport(): Promise<string> {
     `Hors optimisation de batterie : ${diag ? (diag.ignoringBatteryOptimizations ? "oui" : "NON") : "?"}`,
     `Séance de nuit programmée : ${win ? `${String(win.hour).padStart(2, "0")}:${String(win.minute).padStart(2, "0")}` : "AUCUNE"} (réglage : ${settings.nightlyWork || "vide"})`,
     `Dernier déclenchement : ${diag?.lastAlarmResult ?? "jamais"}${diag?.lastAlarmAt ? ` le ${fmt(diag.lastAlarmAt)}` : ""}`,
-    `Réseau maintenant : ${await connectionKind()}`,
+    `Réseau maintenant : ${await connectionKind()} — sur secteur : ${isCharging() ? "oui" : "non"}`,
+    `Mode Karakeep : ${(() => {
+      const m = modeStatus();
+      return m ? `${m.active ? "actif" : "inactif"}, automatique la nuit : ${m.auto ? "oui" : "non"}, autorisé : ${m.permitted ? "oui" : "non"}` : "indisponible";
+    })()}`,
     "",
     "## Modèles",
     `Modèle : ${model?.label ?? settings.modelId} — ${model && (await isModelInstalled(model)) ? "installé" : "PAS INSTALLÉ"}`,

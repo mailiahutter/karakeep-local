@@ -28,6 +28,7 @@ import {
 import { AI_QUEUE_TASK, registerAiBackgroundTask } from "../../src/pipeline/background";
 import { readBackgroundLog, type BackgroundRun } from "../../src/pipeline/heartbeat";
 import { buildDiagnosticReport } from "../../src/pipeline/diagnosticReport";
+import { KarakeepModeCard } from "../../src/ui/KarakeepModeCard";
 import { Button, Card, Row, SectionTitle } from "../../src/ui/components";
 import { spacing, useTheme } from "../../src/ui/theme";
 
@@ -101,7 +102,8 @@ export default function BackgroundScreen() {
         </Row>
         <Text style={[styles.hint, { color: t.textMuted }]}>
           {pending} lien{pending > 1 ? "s" : ""} en attente. Lance une séance
-          maintenant, pose le téléphone, et reviens plus tard.
+          maintenant : les pages sont lues tout de suite, et l'analyse suit si
+          le téléphone est branché.
         </Text>
         <Button
           label={working ? "Arrêter la séance" : "Travailler maintenant"}
@@ -171,8 +173,10 @@ export default function BackgroundScreen() {
           Pour que les pages soient lues aussi la nuit : en mode avion,
           réactive seulement le Wi-Fi (Android s'en souvient pour les nuits
           suivantes). Aucune application ne peut couper le mode avion
-          elle-même. Le jour, un passage toutes les deux heures lit les pages
-          en attente.
+          elle-même — le « Mode Karakeep » ci-dessous fait mieux : il coupe
+          internet pour toutes les autres applications. Le jour, un passage
+          toutes les deux heures lit les pages en attente, sans jamais lancer
+          l'analyse : elle n'a lieu que la nuit, téléphone branché.
         </Text>
         <Row>
           <TextInput
@@ -311,6 +315,8 @@ export default function BackgroundScreen() {
           })();
         }}
       />
+
+      <KarakeepModeCard nightStart={windowText} />
 
       <Card>
         <Row>

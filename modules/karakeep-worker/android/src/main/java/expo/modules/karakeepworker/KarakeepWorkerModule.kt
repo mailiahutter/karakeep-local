@@ -28,6 +28,62 @@ class KarakeepWorkerModule : Module() {
       WorkerService.start(context, kind ?: WorkerService.KIND_NIGHT)
     }
 
+    // --- Mode Karakeep ------------------------------------------------------
+
+    /** État du mode : autorisé, actif, automatique la nuit. */
+    Function("modeStatus") {
+      mapOf(
+        "permitted" to KarakeepModeService.isPermitted(context),
+        "active" to Preferences.isModeActive(context),
+        "auto" to Preferences.isModeAuto(context),
+      )
+    }
+
+    /**
+     * Demande l'autorisation d'être le VPN du téléphone : une seule fois,
+     * par une fenêtre d'Android. Renvoie faux si elle est déjà accordée.
+     */
+    Function("requestModePermission") {
+      val intent = android.net.VpnService.prepare(context) ?: return@Function false
+      val activity = appContext.currentActivity ?: return@Function false
+      activity.startActivityForResult(intent, 0x4b4b)
+      true
+    }
+
+    Function("setModeActive") { active: Boolean ->
+      if (active) {
+        val started = KarakeepModeService.start(context)
+        if (started) Preferences.saveModeActive(context, true)
+        started
+      } else {
+        KarakeepModeService.stop(context)
+        Preferences.saveModeActive(context, false)
+        true
+      }
+    }
+
+    Function("setModeAuto") { auto: Boolean ->
+      Preferences.saveModeAuto(context, auto)
+    }
+
+    /** Propose d'ajouter le bouton aux réglages rapides (Android 13 et +). */
+    Function("requestAddTile") {
+      if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.TIRAMISU) return@Function false
+      val manager = context.getSystemService(android.app.StatusBarManager::class.java) ?: return@Function false
+      manager.requestAddTileService(
+        android.content.ComponentName(context, KarakeepModeTile::class.java),
+        "Mode Karakeep",
+        android.graphics.drawable.Icon.createWithResource(context, R.drawable.ic_karakeep_mode),
+        java.util.concurrent.Executors.newSingleThreadExecutor(),
+      ) { _ -> }
+      true
+    }
+
+    /** Sur secteur ? L'analyse par le modèle n'a lieu qu'à cette condition. */
+    Function("isCharging") {
+      Power.isCharging(context)
+    }
+
     /** Passages de jour : programmés ou annulés, prochain créneau renvoyé. */
     Function("scheduleDayPasses") { enabled: Boolean ->
       if (enabled) AlarmScheduler.scheduleDay(context).toDouble() else {

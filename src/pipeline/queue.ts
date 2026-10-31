@@ -374,11 +374,17 @@ export interface ProcessOptions {
   /** Temps maximal accordé au cycle, pour tenir dans une fenêtre système. */
   budgetMs?: number;
   /**
-   * Lire les pages seulement, sans analyse : passage de jour sur batterie,
-   * où chauffer le téléphone vingt minutes avec le modèle n'est pas
-   * acceptable. L'analyse attend la nuit, sur secteur.
+   * Faire tourner le modèle d'IA. Faux par défaut : décision du 31 octobre,
+   * l'analyse ne tourne QUE la nuit, téléphone sur secteur — elle vide la
+   * batterie en une heure. Le jour, ouvrir l'application, partager un lien
+   * ou un passage programmé ne font que lire les pages.
    */
-  skipAi?: boolean;
+  analyse?: boolean;
+  /**
+   * Interrompt l'analyse (pas la lecture des pages) dès qu'il répond vrai —
+   * en pratique, quand le téléphone est débranché en pleine nuit.
+   */
+  stopAnalysis?: () => boolean;
 }
 
 /**
@@ -416,7 +422,9 @@ export async function processPending(opts: ProcessOptions = {}): Promise<void> {
       rerun = false;
       const settings = await loadSettings();
       const fetched = settings.autoFetch ? await runFetchStage(deadline) : 0;
-      const tagged = opts.skipAi ? 0 : await runTagStage(deadline);
+      const tagged = opts.analyse
+        ? await runTagStage(() => deadline() || (opts.stopAnalysis?.() ?? false))
+        : 0;
       // Les reprises passent en dernier : elles améliorent l'existant, alors
       // que les deux étapes précédentes débloquent des liens en attente.
       const upgraded =

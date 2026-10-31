@@ -4,6 +4,7 @@ import { countPendingWork } from "../db/bookmarks";
 import { recordBackgroundRun } from "./heartbeat";
 import { isQueueLockHeld } from "./lock";
 import { isProcessing, processPending } from "./queue";
+import { isCharging } from "../../modules/karakeep-worker/src";
 
 /**
  * Travail exécuté par le service au premier plan, sans interface.
@@ -56,16 +57,20 @@ export async function runHeadlessSession(data: SessionData = {}): Promise<void> 
   }
 
   const label = kind === "night" ? "Séance de nuit" : kind === "day" ? "Passage de jour" : "Après partage";
-  // Le jour, sur batterie, on lit les pages sans faire tourner le modèle.
-  const skipAi = kind !== "night" && !data.charging;
+  // L'analyse ne tourne que la nuit, sur secteur ; le reste du temps, on lit
+  // seulement les pages. Débrancher en pleine nuit l'arrête aussitôt.
+  const analyse = kind === "night" && isCharging();
   await recordBackgroundRun(
-    `${label} démarré(e), ${before} lien(s) en attente${skipAi ? " — lecture des pages seulement (sur batterie)" : ""}.`,
+    `${label} démarré(e), ${before} lien(s) en attente${
+      analyse ? "" : kind === "night" ? " — téléphone sur batterie : lecture des pages seulement, analyse reportée" : " — lecture des pages seulement"
+    }.`,
   );
   try {
     await processPending({
       headless: true,
       budgetMs: kind === "night" ? NIGHT_BUDGET_MS : DAY_BUDGET_MS,
-      skipAi,
+      analyse,
+      stopAnalysis: () => !isCharging(),
     });
     const after = await countPendingWork();
     await recordBackgroundRun(

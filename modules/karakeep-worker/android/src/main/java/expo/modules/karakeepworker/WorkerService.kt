@@ -65,10 +65,7 @@ class WorkerService : HeadlessJsTaskService() {
     )
   }
 
-  private fun isCharging(): Boolean {
-    val battery = getSystemService(Context.BATTERY_SERVICE) as android.os.BatteryManager
-    return battery.isCharging
-  }
+  private fun isCharging(): Boolean = Power.isCharging(this)
 
   override fun onDestroy() {
     releaseWakeLock()
@@ -170,6 +167,8 @@ class WorkerService : HeadlessJsTaskService() {
     const val KIND_DAY = "day"
     /** Juste après un partage : finir la capture même si l'on revient à Instagram. */
     const val KIND_SHARE = "share"
+    /** Le matin : couper le mode Karakeep automatique. Ne démarre aucune séance. */
+    const val KIND_MORNING = "morning"
 
     fun start(context: Context, kind: String = KIND_NIGHT) {
       val intent = Intent(context, WorkerService::class.java).putExtra(EXTRA_KIND, kind)
@@ -183,5 +182,22 @@ class WorkerService : HeadlessJsTaskService() {
     fun stop(context: Context) {
       context.stopService(Intent(context, WorkerService::class.java))
     }
+  }
+}
+
+/** État de l'alimentation. */
+object Power {
+  /**
+   * Branché sur secteur (ou chargeur USB, ou sans fil). On lit l'état
+   * collant de la batterie plutôt que `BatteryManager.isCharging`, qui
+   * répond faux quand la batterie est pleine alors que le téléphone est
+   * bien branché — précisément le cas en fin de nuit.
+   */
+  fun isCharging(context: Context): Boolean {
+    val status = context.registerReceiver(
+      null,
+      android.content.IntentFilter(Intent.ACTION_BATTERY_CHANGED),
+    ) ?: return false
+    return status.getIntExtra(android.os.BatteryManager.EXTRA_PLUGGED, 0) != 0
   }
 }
