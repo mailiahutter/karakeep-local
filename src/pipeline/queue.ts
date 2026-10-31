@@ -88,6 +88,11 @@ export interface QueueState {
   bookmarkId: string | null;
 }
 
+/** Un cycle tourne-t-il dans ce processus ? */
+export function isProcessing(): boolean {
+  return running;
+}
+
 export function queueState(): QueueState {
   return { phase, bookmarkId: currentId };
 }
@@ -359,6 +364,12 @@ export interface ProcessOptions {
   headless?: boolean;
   /** Temps maximal accordé au cycle, pour tenir dans une fenêtre système. */
   budgetMs?: number;
+  /**
+   * Lire les pages seulement, sans analyse : passage de jour sur batterie,
+   * où chauffer le téléphone vingt minutes avec le modèle n'est pas
+   * acceptable. L'analyse attend la nuit, sur secteur.
+   */
+  skipAi?: boolean;
 }
 
 /**
@@ -396,7 +407,7 @@ export async function processPending(opts: ProcessOptions = {}): Promise<void> {
       rerun = false;
       const settings = await loadSettings();
       const fetched = settings.autoFetch ? await runFetchStage(deadline) : 0;
-      const tagged = await runTagStage(deadline);
+      const tagged = opts.skipAi ? 0 : await runTagStage(deadline);
       // Les reprises passent en dernier : elles améliorent l'existant, alors
       // que les deux étapes précédentes débloquent des liens en attente.
       const upgraded =

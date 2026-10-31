@@ -5,6 +5,7 @@ import { ToastAndroid } from "react-native";
 import { createBookmark } from "../db/bookmarks";
 import { extractUrl } from "../db/urls";
 import { processPending } from "../pipeline/queue";
+import { startWorker } from "../../modules/karakeep-worker/src";
 import { notifyBookmarksChanged } from "./events";
 
 /**
@@ -48,8 +49,14 @@ export function ShareIntentHandler() {
           ToastAndroid.SHORT,
         );
         notifyBookmarksChanged();
-        await processPending();
-        notifyBookmarksChanged();
+        // Le service au premier plan finit la lecture de la page même si
+        // l'on revient aussitôt à Instagram — ce qui est le cas presque à
+        // chaque fois. Sans lui, Android tuait l'application en pleine
+        // capture et le lien restait « en attente ».
+        if (!startWorker("share")) {
+          await processPending();
+          notifyBookmarksChanged();
+        }
       } catch (err) {
         ToastAndroid.show(
           `Échec de l'enregistrement : ${(err as Error).message}`,

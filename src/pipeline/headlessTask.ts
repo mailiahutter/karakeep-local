@@ -1,9 +1,9 @@
-import { AppRegistry, AppState } from "react-native";
+import { AppRegistry } from "react-native";
 
 import { countPendingWork } from "../db/bookmarks";
 import { recordBackgroundRun } from "./heartbeat";
 import { isQueueLockHeld } from "./lock";
-import { processPending } from "./queue";
+import { isProcessing, processPending } from "./queue";
 
 /**
  * Travail exécuté par le service au premier plan, sans interface.
@@ -20,16 +20,33 @@ import { processPending } from "./queue";
 
 export const HEADLESS_TASK = "KarakeepWork";
 
-/** Marge sous la borne du service natif, pour finir proprement. */
-const SESSION_BUDGET_MS = 50 * 60_000;
+/** Marges sous les bornes du service natif (5 h la nuit, 20 min le jour). */
+const NIGHT_BUDGET_MS = 4 * 60 * 60_000 + 50 * 60_000;
+const DAY_BUDGET_MS = 18 * 60_000;
 
-export async function runHeadlessSession(): Promise<void> {
+interface SessionData {
+  /** `night` : séance programmée ; `day` : passage de jour ; `share` : après un partage. */
+  kind?: "night" | "day" | "share";
+  charging?: boolean;
+}
+
+export async function runHeadlessSession(data: SessionData = {}): Promise<void> {
+  const kind = data.kind ?? "night";
   // Deux contextes llama.cpp chargés en même temps, ce sont dix gigaoctets
   // demandés d'un coup : le système en tuerait un. L'interface est
   // prioritaire, elle traite déjà la file.
-  if (AppState.currentState === "active" || (await isQueueLockHeld())) {
-    await recordBackgroundRun("Séance ignorée : traitement déjà en cours.");
-    return;
+  //
+  // Plutôt que d'abandonner, on attend que l'autre cycle ait fini : le
+  // service au premier plan garde le processus en vie pendant ce temps.
+  // Abandonner, c'était laisser Android tuer l'application dès que
+  // l'utilisateur revenait à Instagram, au milieu de la lecture de la page.
+  const waitUntil = Date.now() + (kind === "night" ? 30 : 15) * 60_000;
+  while (isProcessing() || (await isQueueLockHeld())) {
+    if (Date.now() > waitUntil) {
+      await recordBackgroundRun("Séance ignorée : un autre traitement ne se termine pas.");
+      return;
+    }
+    await new Promise((r) => setTimeout(r, 5_000));
   }
 
   const before = await countPendingWork();
@@ -38,14 +55,23 @@ export async function runHeadlessSession(): Promise<void> {
     return;
   }
 
-  await recordBackgroundRun(`Séance démarrée, ${before} lien(s) en attente.`);
+  const label = kind === "night" ? "Séance de nuit" : kind === "day" ? "Passage de jour" : "Après partage";
+  // Le jour, sur batterie, on lit les pages sans faire tourner le modèle.
+  const skipAi = kind !== "night" && !data.charging;
+  await recordBackgroundRun(
+    `${label} démarré(e), ${before} lien(s) en attente${skipAi ? " — lecture des pages seulement (sur batterie)" : ""}.`,
+  );
   try {
-    await processPending({ headless: true, budgetMs: SESSION_BUDGET_MS });
+    await processPending({
+      headless: true,
+      budgetMs: kind === "night" ? NIGHT_BUDGET_MS : DAY_BUDGET_MS,
+      skipAi,
+    });
     const after = await countPendingWork();
     await recordBackgroundRun(
       before === after
-        ? `Séance terminée sans progrès, ${after} toujours en attente.`
-        : `Séance : ${before - after} traité(s), ${after} restant(s).`,
+        ? `${label} terminé(e) sans progrès, ${after} toujours en attente.`
+        : `${label} : ${before - after} traité(s), ${after} restant(s).`,
     );
   } catch (err) {
     await recordBackgroundRun(`Séance interrompue : ${(err as Error).message}`);
@@ -60,4 +86,4 @@ export async function runHeadlessSession(): Promise<void> {
  * moteur sans interface, aucun écran n'est monté — une tâche déclarée depuis
  * un composant n'existerait tout simplement pas.
  */
-AppRegistry.registerHeadlessTask(HEADLESS_TASK, () => runHeadlessSession);
+AppRegistry.registerHeadlessTask(HEADLESS_TASK, () => (data: SessionData) => runHeadlessSession(data ?? {}));

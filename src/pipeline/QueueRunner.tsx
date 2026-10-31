@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { AppState } from "react-native";
 
-import { scheduleDailyWork, scheduledWindow } from "../../modules/karakeep-worker/src";
+import { scheduleDailyWork, scheduleDayPasses } from "../../modules/karakeep-worker/src";
 import { registerAiBackgroundTask } from "./background";
 import { parseWindow } from "./schedule";
 import { processPending } from "./queue";
@@ -33,9 +33,13 @@ export function QueueRunner() {
     void (async () => {
       const { nightlyWork } = await loadSettings();
       const wanted = parseWindow(nightlyWork);
-      if (wanted && !scheduledWindow()) {
-        scheduleDailyWork(wanted.hour, wanted.minute);
-      }
+      // Reposée à chaque lancement, même si une fenêtre est connue : une
+      // alarme peut disparaître (arrêt forcé, nettoyage du constructeur)
+      // alors que la fenêtre mémorisée, elle, reste. Reposer est sans effet
+      // de bord — la même alarme est remplacée.
+      if (wanted) scheduleDailyWork(wanted.hour, wanted.minute);
+      // Les passages de jour lisent les pages tant que le réseau est là.
+      scheduleDayPasses(true);
     })();
 
     // Le retour au premier plan est le moment où le travail suspendu par la

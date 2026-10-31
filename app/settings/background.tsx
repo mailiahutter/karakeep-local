@@ -3,7 +3,7 @@ import * as BackgroundTask from "expo-background-task";
 import * as IntentLauncher from "expo-intent-launcher";
 import { useFocusEffect } from "expo-router";
 import { useCallback, useState } from "react";
-import { Alert, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Alert, ScrollView, Share, StyleSheet, Text, TextInput, View } from "react-native";
 
 import { countPendingWork, requeueUnfinished } from "../../src/db/bookmarks";
 import { processPending } from "../../src/pipeline/queue";
@@ -27,6 +27,7 @@ import {
 } from "../../src/pipeline/schedule";
 import { AI_QUEUE_TASK, registerAiBackgroundTask } from "../../src/pipeline/background";
 import { readBackgroundLog, type BackgroundRun } from "../../src/pipeline/heartbeat";
+import { buildDiagnosticReport } from "../../src/pipeline/diagnosticReport";
 import { Button, Card, Row, SectionTitle } from "../../src/ui/components";
 import { spacing, useTheme } from "../../src/ui/theme";
 
@@ -162,9 +163,16 @@ export default function BackgroundScreen() {
         </Row>
         <Text style={[styles.hint, { color: t.textMuted }]}>
           À l'heure indiquée, chaque nuit, l'application se met au travail
-          seule. Le mode avion ne la gêne pas : l'analyse par le modèle est
-          entièrement locale — seule la lecture des pages neuves demande du
-          réseau.
+          seule, jusqu'à cinq heures d'affilée, et s'arrête quand tout est
+          rangé. L'analyse par le modèle est entièrement locale ; seule la
+          lecture des pages neuves demande du réseau.
+        </Text>
+        <Text style={[styles.hint, { color: t.text }]}>
+          Pour que les pages soient lues aussi la nuit : en mode avion,
+          réactive seulement le Wi-Fi (Android s'en souvient pour les nuits
+          suivantes). Aucune application ne peut couper le mode avion
+          elle-même. Le jour, un passage toutes les deux heures lit les pages
+          en attente.
         </Text>
         <Row>
           <TextInput
@@ -303,6 +311,29 @@ export default function BackgroundScreen() {
           })();
         }}
       />
+
+      <Card>
+        <Row>
+          <Ionicons name="document-text-outline" size={19} color={t.accent} />
+          <Text style={[styles.stat, { color: t.text }]}>Journal à transmettre</Text>
+        </Row>
+        <Text style={[styles.hint, { color: t.textMuted }]}>
+          Un rapport en texte : réglages Android qui bloquent, état de la file
+          étape par étape, derniers réveils. Aucune adresse de lien dedans.
+          Envoie-le pour qu'on comprenne pourquoi rien n'avance.
+        </Text>
+        <Button
+          label="Envoyer le journal"
+          icon="share-outline"
+          variant="secondary"
+          onPress={() => {
+            void (async () => {
+              const report = await buildDiagnosticReport();
+              await Share.share({ message: report, title: "Journal Karakeep Local" });
+            })();
+          }}
+        />
+      </Card>
 
       {log.length > 0 && (
         <>

@@ -16,6 +16,7 @@ class BootReceiver : BroadcastReceiver() {
       action == Intent.ACTION_MY_PACKAGE_REPLACED
     ) {
       AlarmScheduler.rearm(context)
+      AlarmScheduler.rearmDay(context)
     }
   }
 }

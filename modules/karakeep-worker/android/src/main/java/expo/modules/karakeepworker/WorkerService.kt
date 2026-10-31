@@ -50,14 +50,25 @@ class WorkerService : HeadlessJsTaskService() {
     }
   }
 
-  override fun getTaskConfig(intent: Intent?): HeadlessJsTaskConfig =
-    HeadlessJsTaskConfig(
+  override fun getTaskConfig(intent: Intent?): HeadlessJsTaskConfig {
+    val kind = intent?.getStringExtra(EXTRA_KIND) ?: KIND_NIGHT
+    val data = Arguments.createMap().apply {
+      putString("kind", kind)
+      putBoolean("charging", isCharging())
+    }
+    return HeadlessJsTaskConfig(
       TASK_NAME,
-      Arguments.createMap(),
-      TASK_TIMEOUT_MS,
+      data,
+      if (kind == KIND_NIGHT) NIGHT_TIMEOUT_MS else DAY_TIMEOUT_MS,
       // Autorisé en premier plan : c'est précisément le but.
       true,
     )
+  }
+
+  private fun isCharging(): Boolean {
+    val battery = getSystemService(Context.BATTERY_SERVICE) as android.os.BatteryManager
+    return battery.isCharging
+  }
 
   override fun onDestroy() {
     releaseWakeLock()
@@ -142,15 +153,26 @@ class WorkerService : HeadlessJsTaskService() {
     const val NOTIFICATION_ID = 4711
 
     /**
-     * Android 15 limite un service `dataSync` à six heures par jour. On
-     * s'arrête bien avant : une seule séance n'a aucune raison de durer
-     * autant, et dépasser ferait tuer le service par le système.
+     * Android 15 limite un service `dataSync` à six heures par jour. La
+     * séance de nuit en prend au plus cinq — elle s'arrête d'elle-même dès
+     * que la file est vide —, les passages de jour vingt minutes chacun.
+     * L'ancienne borne de 55 minutes ne laissait passer qu'une douzaine de
+     * liens par nuit avec un modèle de 4 milliards de paramètres.
      */
-    const val TASK_TIMEOUT_MS = 55L * 60L * 1000L
-    const val WAKE_LOCK_TIMEOUT_MS = 60L * 60L * 1000L
+    const val NIGHT_TIMEOUT_MS = 5L * 60L * 60L * 1000L
+    const val DAY_TIMEOUT_MS = 20L * 60L * 1000L
+    const val WAKE_LOCK_TIMEOUT_MS = NIGHT_TIMEOUT_MS + 10L * 60L * 1000L
 
-    fun start(context: Context) {
-      val intent = Intent(context, WorkerService::class.java)
+    const val EXTRA_KIND = "kind"
+    /** Séance de nuit : jusqu'à ce que tout soit traité, cinq heures au plus. */
+    const val KIND_NIGHT = "night"
+    /** Passage de jour : court, surtout pour lire les pages pendant qu'il y a du réseau. */
+    const val KIND_DAY = "day"
+    /** Juste après un partage : finir la capture même si l'on revient à Instagram. */
+    const val KIND_SHARE = "share"
+
+    fun start(context: Context, kind: String = KIND_NIGHT) {
+      val intent = Intent(context, WorkerService::class.java).putExtra(EXTRA_KIND, kind)
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
         context.startForegroundService(intent)
       } else {

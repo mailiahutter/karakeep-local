@@ -78,6 +78,58 @@ object AlarmScheduler {
     Preferences.clearWindow(context)
   }
 
+  // --- Passages de jour ------------------------------------------------------
+
+  private const val DAY_REQUEST_CODE = 4713
+  /** Toutes les deux heures, de 8 h à 22 h. */
+  private val DAY_HOURS = listOf(8, 10, 12, 14, 16, 18, 20, 22)
+
+  private fun dayIntent(context: Context): PendingIntent =
+    PendingIntent.getBroadcast(
+      context,
+      DAY_REQUEST_CODE,
+      Intent(context, AlarmReceiver::class.java).putExtra(WorkerService.EXTRA_KIND, WorkerService.KIND_DAY),
+      PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+    )
+
+  /** Prochain créneau de jour, aujourd'hui ou demain matin. */
+  fun nextDaySlot(now: Long = System.currentTimeMillis()): Long =
+    DAY_HOURS.map { nextOccurrence(it, 5, now) }.minOrNull() ?: nextOccurrence(8, 5, now)
+
+  /**
+   * Programme le prochain passage de jour.
+   *
+   * La nuit, le téléphone est en mode avion : une page partagée le soir ne
+   * pouvait être lue qu'à l'ouverture suivante de l'application — c'est-à-dire
+   * jamais. Ces passages courts lisent les pages tant que le réseau est là.
+   */
+  fun scheduleDay(context: Context): Long {
+    val at = nextDaySlot()
+    val manager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+    val intent = dayIntent(context)
+    try {
+      if (canScheduleExact(context)) {
+        manager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, intent)
+      } else {
+        manager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, intent)
+      }
+    } catch (e: SecurityException) {
+      manager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, intent)
+    }
+    Preferences.saveDayEnabled(context, true)
+    return at
+  }
+
+  fun cancelDay(context: Context) {
+    val manager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+    manager.cancel(dayIntent(context))
+    Preferences.saveDayEnabled(context, false)
+  }
+
+  fun rearmDay(context: Context) {
+    if (Preferences.isDayEnabled(context)) scheduleDay(context)
+  }
+
   /**
    * Repose l'alarme du lendemain.
    *
@@ -106,6 +158,15 @@ object Preferences {
     context.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit()
       .remove(HOUR).remove(MINUTE).apply()
   }
+
+  private const val DAY_ENABLED = "day-enabled"
+
+  fun saveDayEnabled(context: Context, enabled: Boolean) {
+    context.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit().putBoolean(DAY_ENABLED, enabled).apply()
+  }
+
+  fun isDayEnabled(context: Context): Boolean =
+    context.getSharedPreferences(FILE, Context.MODE_PRIVATE).getBoolean(DAY_ENABLED, false)
 
   private const val LAST_ALARM = "last-alarm"
 

@@ -8,7 +8,8 @@ import { requireOptionalNativeModule } from "expo";
  * se constater, pas faire planter l'écran.
  */
 interface KarakeepWorkerNative {
-  start(): void;
+  start(kind?: string | null): void;
+  scheduleDayPasses(enabled: boolean): number;
   stop(): void;
   isRunning(): boolean;
   scheduleDaily(hour: number, minute: number): number;
@@ -37,10 +38,26 @@ const native = requireOptionalNativeModule<KarakeepWorkerNative>("KarakeepWorker
 
 export const isWorkerAvailable = (): boolean => native !== null;
 
-export function startWorker(): boolean {
+export type SessionKind = "night" | "day" | "share";
+
+export function startWorker(kind: SessionKind = "night"): boolean {
   if (!native) return false;
-  native.start();
+  try {
+    native.start(kind);
+  } catch {
+    // Version native antérieure, sans argument.
+    (native as unknown as { start(): void }).start();
+  }
   return true;
+}
+
+/** Passages de jour toutes les deux heures. Renvoie le prochain, ou `null`. */
+export function scheduleDayPasses(enabled: boolean): number | null {
+  try {
+    return typeof native?.scheduleDayPasses === "function" ? native.scheduleDayPasses(enabled) || null : null;
+  } catch {
+    return null;
+  }
 }
 
 export function stopWorker(): void {

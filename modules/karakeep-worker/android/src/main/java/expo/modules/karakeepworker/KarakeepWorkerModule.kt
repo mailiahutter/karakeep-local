@@ -24,8 +24,16 @@ class KarakeepWorkerModule : Module() {
     Name("KarakeepWorker")
 
     /** Démarre une séance tout de suite. */
-    Function("start") {
-      WorkerService.start(context)
+    Function("start") { kind: String? ->
+      WorkerService.start(context, kind ?: WorkerService.KIND_NIGHT)
+    }
+
+    /** Passages de jour : programmés ou annulés, prochain créneau renvoyé. */
+    Function("scheduleDayPasses") { enabled: Boolean ->
+      if (enabled) AlarmScheduler.scheduleDay(context).toDouble() else {
+        AlarmScheduler.cancelDay(context)
+        0.0
+      }
     }
 
     Function("stop") {

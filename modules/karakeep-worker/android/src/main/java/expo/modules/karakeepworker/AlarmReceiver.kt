@@ -15,18 +15,19 @@ import android.util.Log
  */
 class AlarmReceiver : BroadcastReceiver() {
   override fun onReceive(context: Context, intent: Intent?) {
+    val kind = intent?.getStringExtra(WorkerService.EXTRA_KIND) ?: WorkerService.KIND_NIGHT
     try {
-      WorkerService.start(context)
-      Preferences.saveLastAlarm(context, "ok")
+      WorkerService.start(context, kind)
+      Preferences.saveLastAlarm(context, "ok ($kind)")
     } catch (e: Exception) {
       Log.w("KarakeepWorker", "Démarrage refusé par le système", e)
       Preferences.saveLastAlarm(
         context,
-        "refus: " + (e.message ?: e.javaClass.simpleName),
+        "refus ($kind): " + (e.message ?: e.javaClass.simpleName),
       )
     }
     // Réarmé dans tous les cas : un refus ce soir ne doit pas supprimer la
     // séance de demain.
-    AlarmScheduler.rearm(context)
+    if (kind == WorkerService.KIND_DAY) AlarmScheduler.rearmDay(context) else AlarmScheduler.rearm(context)
   }
 }
