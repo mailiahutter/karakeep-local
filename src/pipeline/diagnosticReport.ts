@@ -56,7 +56,7 @@ export async function buildDiagnosticReport(): Promise<string> {
     `Réseau maintenant : ${await connectionKind()} — sur secteur : ${isCharging() ? "oui" : "non"}`,
     `Mode Karakeep : ${(() => {
       const m = modeStatus();
-      return m ? `${m.active ? "actif" : "inactif"}, automatique la nuit : ${m.auto ? "oui" : "non"}, autorisé : ${m.permitted ? "oui" : "non"}` : "indisponible";
+      return m ? `${m.active ? "actif" : "inactif"}, automatique la nuit : ${m.auto ? "oui" : "non"}, autorisé : ${m.permitted ? "oui" : "non"}, appels refusés : ${m.blocksCalls ? "oui" : "non"}, silence : ${m.quietAccess ? "oui" : "non"}` : "indisponible";
     })()}`,
     "",
     "## Modèles",

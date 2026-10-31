@@ -6,7 +6,9 @@ import { Alert, AppState, StyleSheet, Switch, Text, View } from "react-native";
 import {
   modeStatus,
   requestAddTile,
+  requestCallBlocking,
   requestModePermission,
+  requestQuietAccess,
   setModeActive,
   setModeAuto,
   type ModeStatus,
@@ -52,12 +54,36 @@ export function KarakeepModeCard({ nightStart }: { nightStart: string }) {
         </Text>
       </Row>
       <Text style={[styles.hint, { color: t.textMuted }]}>
-        À la place du mode avion : internet est coupé pour toutes les autres
-        applications — plus de notifications ni de mises à jour —, Karakeep
-        seul garde le Wi-Fi et lit les pages la nuit. Les appels et SMS ne
-        passent pas par internet et ne sont pas coupés : pour eux, le mode
-        « Ne pas déranger » d'Android.
+        À la place du mode avion : Karakeep seul garde internet et lit les
+        pages la nuit. Pour tout le reste, comme en mode avion : internet coupé
+        aux autres applications, appels entrants refusés (messagerie), SMS et
+        notifications en silence jusqu'au matin. Le réveil sonne toujours, et
+        on peut toujours appeler, y compris les urgences.
       </Text>
+      <Requirement
+        done={status.permitted}
+        label="Couper internet aux autres applications"
+        action="Autoriser"
+        onPress={() => void requestModePermission()}
+      />
+      <Requirement
+        done={!!status.blocksCalls}
+        label="Refuser les appels entrants"
+        action="Autoriser"
+        onPress={() => void requestCallBlocking()}
+      />
+      <Requirement
+        done={!!status.quietAccess}
+        label="Silence : SMS et notifications (réveil excepté)"
+        action="Autoriser"
+        onPress={() => {
+          requestQuietAccess();
+          Alert.alert(
+            "Dernière autorisation",
+            "Dans la liste qui s'ouvre, active « Karakeep Local », puis reviens ici.",
+          );
+        }}
+      />
       <Button
         label={status.active ? "Désactiver maintenant" : "Activer maintenant"}
         icon={status.active ? "wifi" : "moon"}
@@ -99,6 +125,36 @@ export function KarakeepModeCard({ nightStart }: { nightStart: string }) {
         }}
       />
     </Card>
+  );
+}
+
+/** Une autorisation d'Android, accordée ou à accorder. */
+function Requirement({
+  done,
+  label,
+  action,
+  onPress,
+}: {
+  done: boolean;
+  label: string;
+  action: string;
+  onPress: () => void;
+}) {
+  const t = useTheme();
+  return (
+    <Row>
+      <Ionicons
+        name={done ? "checkmark-circle" : "ellipse-outline"}
+        size={18}
+        color={done ? t.success : t.warning}
+      />
+      <Text style={{ flex: 1, color: t.text, fontSize: 13.5 }}>{label}</Text>
+      {!done && (
+        <Text onPress={onPress} style={{ color: t.accent, fontWeight: "700" }}>
+          {action}
+        </Text>
+      )}
+    </Row>
   );
 }
 

@@ -22,8 +22,9 @@ import java.io.FileInputStream
  * tout ce qui y entre est jeté — et Karakeep en est exclu, donc garde le
  * réseau normal. Rien ne sort du téléphone, rien n'est inspecté.
  *
- * Les appels et SMS ne passent pas par internet : ils ne sont pas coupés
- * (le mode « Ne pas déranger » d'Android s'en charge).
+ * Les appels et SMS ne passent pas par internet : les appels entrants sont
+ * refusés par KarakeepCallScreener, et « Ne pas déranger » (alarmes
+ * uniquement) fait taire le reste — voir QuietControl.
  */
 class KarakeepModeService : VpnService() {
 
@@ -64,6 +65,9 @@ class KarakeepModeService : VpnService() {
         .addDisallowedApplication(packageName)
       tun = builder.establish()
       Preferences.saveModeActive(this, tun != null)
+      // Comme le mode avion : appels refusés (voir KarakeepCallScreener) et
+      // silence, réveil excepté.
+      if (tun != null) QuietControl.enter(this)
       // On vide la file du tunnel sans rien en faire : les paquets des
       // autres applications disparaissent, leurs connexions échouent.
       val fd = tun ?: return
@@ -92,8 +96,10 @@ class KarakeepModeService : VpnService() {
       tun?.close()
     } catch (_: Exception) {
     }
+    val wasActive = tun != null
     tun = null
     Preferences.saveModeActive(this, false)
+    if (wasActive) QuietControl.exit(this)
     TileService.requestListeningState(this, android.content.ComponentName(this, KarakeepModeTile::class.java))
   }
 

@@ -21,6 +21,9 @@
     android:maxSdkVersion="32" />
   <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
 
+  <!-- Mode Karakeep : passer en « Ne pas déranger », alarmes uniquement. -->
+  <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
+
   <!-- Le bouton des réglages rapides : la permission est demandée par Android
        lui-même quand on l'ajoute au panneau. -->
   <application>
@@ -32,6 +35,16 @@
       android:permission="android.permission.BIND_VPN_SERVICE">
       <intent-filter>
         <action android:name="android.net.VpnService" />
+      </intent-filter>
+    </service>
+
+    <!-- Refus des appels entrants pendant le mode Karakeep. -->
+    <service
+      android:name=".KarakeepCallScreener"
+      android:exported="true"
+      android:permission="android.permission.BIND_SCREENING_SERVICE">
+      <intent-filter>
+        <action android:name="android.telecom.CallScreeningService" />
       </intent-filter>
     </service>
 

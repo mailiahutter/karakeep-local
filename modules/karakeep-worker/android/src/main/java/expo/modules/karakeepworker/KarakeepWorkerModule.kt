@@ -36,7 +36,29 @@ class KarakeepWorkerModule : Module() {
         "permitted" to KarakeepModeService.isPermitted(context),
         "active" to Preferences.isModeActive(context),
         "auto" to Preferences.isModeAuto(context),
+        "blocksCalls" to QuietControl.screensCalls(context),
+        "quietAccess" to QuietControl.hasAccess(context),
       )
+    }
+
+    /** Demande le rôle de filtre d'appels (Android 10 et +). */
+    Function("requestCallBlocking") {
+      if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.Q) return@Function false
+      val roles = context.getSystemService(android.app.role.RoleManager::class.java) ?: return@Function false
+      val activity = appContext.currentActivity ?: return@Function false
+      activity.startActivityForResult(
+        roles.createRequestRoleIntent(android.app.role.RoleManager.ROLE_CALL_SCREENING),
+        0x4b4c,
+      )
+      true
+    }
+
+    /** Ouvre l'écran d'Android qui accorde l'accès à « Ne pas déranger ». */
+    Function("requestQuietAccess") {
+      val intent = android.content.Intent(android.provider.Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS)
+        .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+      context.startActivity(intent)
+      true
     }
 
     /**

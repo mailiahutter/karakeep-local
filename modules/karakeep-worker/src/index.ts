@@ -16,6 +16,8 @@ interface KarakeepWorkerNative {
   setModeActive(active: boolean): boolean;
   setModeAuto(auto: boolean): void;
   requestAddTile(): boolean;
+  requestCallBlocking(): boolean;
+  requestQuietAccess(): boolean;
   stop(): void;
   isRunning(): boolean;
   scheduleDaily(hour: number, minute: number): number;
@@ -211,6 +213,10 @@ export interface ModeStatus {
   active: boolean;
   /** Activé seul à l'heure de la séance de nuit, coupé à 7 h. */
   auto: boolean;
+  /** Rôle de filtre d'appels accordé : les appels entrants sont refusés. */
+  blocksCalls?: boolean;
+  /** Accès à « Ne pas déranger » accordé : silence, réveil excepté. */
+  quietAccess?: boolean;
 }
 
 export function modeStatus(): ModeStatus | null {
@@ -237,6 +243,22 @@ export function setModeAuto(auto: boolean): void {
 export function requestAddTile(): boolean {
   try {
     return native?.requestAddTile?.() ?? false;
+  } catch {
+    return false;
+  }
+}
+
+export function requestCallBlocking(): boolean {
+  try {
+    return native?.requestCallBlocking?.() ?? false;
+  } catch {
+    return false;
+  }
+}
+
+export function requestQuietAccess(): boolean {
+  try {
+    return native?.requestQuietAccess?.() ?? false;
   } catch {
     return false;
   }
