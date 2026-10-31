@@ -1,6 +1,6 @@
 import { releaseModel } from "./llm";
 import {
-  connectionKind,
+  canDownloadNow,
   deleteModel,
   downloadModel,
   isModelInstalled,
@@ -41,7 +41,7 @@ export async function upgradeModelIfNeeded(): Promise<void> {
       if (old) await deleteModel(old).catch(() => {});
       return;
     }
-    if ((await connectionKind()) !== "wifi") return;
+    if (!(await canDownloadNow())) return;
     // Les deux fichiers : le gestionnaire système les enchaîne, et ne double
     // jamais un transfert déjà en cours.
     for (const file of [target, projector]) {

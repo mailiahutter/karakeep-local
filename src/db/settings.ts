@@ -30,6 +30,12 @@ export interface Settings {
   reviewOnLaunch: boolean;
   /** Heure de la séance de travail quotidienne, « HH:MM », vide si aucune. */
   nightlyWork: string;
+  /**
+   * Télécharger les modèles et mises à jour aussi en données mobiles.
+   * L'utilisateur est en illimité (31 octobre) : attendre le Wi-Fi ne faisait
+   * que retarder le nouveau modèle de plusieurs jours.
+   */
+  cellularDownloads: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -42,6 +48,7 @@ export const DEFAULT_SETTINGS: Settings = {
   aiOnlyWhenCharging: false,
   reviewOnLaunch: true,
   nightlyWork: "03:00",
+  cellularDownloads: true,
 };
 
 export async function loadSettings(): Promise<Settings> {

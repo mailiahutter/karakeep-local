@@ -1,6 +1,6 @@
 import { initLlama, type LlamaContext } from "llama.rn";
 
-import { connectionKind, downloadModel, isModelInstalled, modelPathFor } from "./download";
+import { canDownloadNow, downloadModel, isModelInstalled, modelPathFor } from "./download";
 import type { ModelDescriptor } from "./models";
 import { readEmbedding, writeEmbedding } from "../db/embeddings";
 import { textHash } from "./textHash";
@@ -109,15 +109,15 @@ export async function embedCached(key: string, text: string): Promise<number[] |
 }
 
 /**
- * Lance le téléchargement du modèle de proximité s'il manque, en Wi-Fi
- * seulement. L'utilisateur n'ouvre pas l'application : on n'attend pas qu'il
+ * Lance le téléchargement du modèle de proximité s'il manque, dès qu'il y
+ * a du réseau autorisé (Wi-Fi, ou données mobiles si le réglage le permet). L'utilisateur n'ouvre pas l'application : on n'attend pas qu'il
  * appuie sur un bouton. Le gestionnaire système poursuit application fermée,
  * et ne double jamais un transfert déjà en cours.
  */
 export async function ensureEmbedderDownloaded(): Promise<void> {
   try {
     if (await isEmbedderInstalled()) return;
-    if ((await connectionKind()) !== "wifi") return;
+    if (!(await canDownloadNow())) return;
     const task = await downloadModel(EMBEDDING_MODEL, () => {});
     task.promise.catch(() => {});
   } catch {

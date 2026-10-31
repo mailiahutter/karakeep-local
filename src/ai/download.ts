@@ -121,6 +121,18 @@ export async function connectionKind(): Promise<ConnectionKind> {
   }
 }
 
+/**
+ * Peut-on lancer un gros téléchargement maintenant, sans le demander ?
+ * En Wi-Fi toujours ; en données mobiles si l'utilisateur l'a permis.
+ */
+export async function canDownloadNow(): Promise<boolean> {
+  const connection = await connectionKind();
+  if (connection === "none") return false;
+  if (connection !== "cellular") return true;
+  const { loadSettings } = await import("../db/settings");
+  return (await loadSettings()).cellularDownloads;
+}
+
 export class CellularBlockedError extends Error {
   constructor() {
     super(
@@ -235,6 +247,11 @@ export async function downloadModel(
 
   const connection = await connectionKind();
   if (connection === "none") throw new Error("Aucune connexion réseau.");
+  // Sans choix explicite, c'est le réglage qui décide.
+  if (opts.allowCellular === undefined) {
+    const { loadSettings } = await import("../db/settings");
+    opts = { ...opts, allowCellular: (await loadSettings()).cellularDownloads };
+  }
   if (connection === "cellular" && !opts.allowCellular) {
     throw new CellularBlockedError();
   }

@@ -1,4 +1,4 @@
-import { connectionKind } from "../ai/download";
+import { canDownloadNow } from "../ai/download";
 import { getDb } from "../db/client";
 import { ytdlpUpdate } from "../../modules/karakeep-worker/src";
 
@@ -20,7 +20,7 @@ export async function refreshYtdlpWeekly(): Promise<void> {
       [KEY],
     );
     if (row && Date.now() - Number(row.value) < WEEK_MS) return;
-    if ((await connectionKind()) !== "wifi") return;
+    if (!(await canDownloadNow())) return;
     const status = await ytdlpUpdate();
     if (status === null) return;
     await db.runAsync(

@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
 
 import {
   attachExistingDownload,
@@ -40,6 +40,10 @@ export default function ModelScreen() {
 
   const [selectedId, setSelectedId] = useState<string>("");
   const [installed, setInstalled] = useState<Record<string, boolean>>({});
+  const [cellular, setCellular] = useState(true);
+  useEffect(() => {
+    void loadSettings().then((st) => setCellular(st.cellularDownloads));
+  }, []);
   const [download, setDownload] = useState<DownloadState | null>(null);
   const [partials, setPartials] = useState<Record<string, number>>({});
   const [connection, setConnection] = useState<ConnectionKind>("other");
@@ -103,7 +107,7 @@ export default function ModelScreen() {
   // le transfert, application fermée s'il le faut.
 
   const start = useCallback(
-    async (model: ModelDescriptor, allowCellular = false) => {
+    async (model: ModelDescriptor, allowCellular: boolean | undefined = undefined) => {
       setDownload({
         modelId: model.id,
         ratio: 0,
@@ -229,11 +233,26 @@ export default function ModelScreen() {
             {connection === "wifi"
               ? "Connecté en Wi-Fi : le téléchargement peut se lancer."
               : connection === "cellular"
-                ? "Données mobiles. Le téléchargement est bloqué : un modèle représente plusieurs gigaoctets, soit un forfait entier."
+                ? cellular
+                  ? "Données mobiles : le téléchargement est autorisé (forfait illimité)."
+                  : "Données mobiles : le téléchargement attend le Wi-Fi."
                 : connection === "none"
                   ? "Aucune connexion réseau."
                   : "Connexion réseau détectée."}
           </Text>
+        </Row>
+        <Row style={{ justifyContent: "space-between" }}>
+          <Text style={[styles.notes, { color: t.text, flex: 1 }]}>
+            Télécharger aussi en données mobiles (forfait illimité)
+          </Text>
+          <Switch
+            value={cellular}
+            onValueChange={(v) => {
+              setCellular(v);
+              void saveSetting("cellularDownloads", v);
+            }}
+            trackColor={{ true: t.accent, false: t.border }}
+          />
         </Row>
       </Card>
 
@@ -401,7 +420,7 @@ function EmbedderCard() {
     void refresh();
   }, [refresh]);
 
-  const start = async (allowCellular = false) => {
+  const start = async (allowCellular: boolean | undefined = undefined) => {
     setBusy(true);
     try {
       const task = await downloadModel(
