@@ -21,6 +21,10 @@
     android:maxSdkVersion="32" />
   <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
 
+  <!-- Demander directement l'exemption d'optimisation de batterie : sans
+       elle, Android coupe le réseau de l'application en veille profonde. -->
+  <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+
   <!-- Mode Karakeep : passer en « Ne pas déranger », alarmes uniquement. -->
   <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
 

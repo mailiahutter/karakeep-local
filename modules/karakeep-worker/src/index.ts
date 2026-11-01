@@ -18,6 +18,7 @@ interface KarakeepWorkerNative {
   requestAddTile(): boolean;
   requestCallBlocking(): boolean;
   requestQuietAccess(): boolean;
+  requestBatteryExemption(): boolean;
   stop(): void;
   isRunning(): boolean;
   scheduleDaily(hour: number, minute: number): number;
@@ -217,6 +218,8 @@ export interface ModeStatus {
   blocksCalls?: boolean;
   /** Accès à « Ne pas déranger » accordé : silence, réveil excepté. */
   quietAccess?: boolean;
+  /** Hors optimisation de batterie : réseau garanti en veille profonde. */
+  batteryExempt?: boolean;
 }
 
 export function modeStatus(): ModeStatus | null {
@@ -259,6 +262,14 @@ export function requestCallBlocking(): boolean {
 export function requestQuietAccess(): boolean {
   try {
     return native?.requestQuietAccess?.() ?? false;
+  } catch {
+    return false;
+  }
+}
+
+export function requestBatteryExemption(): boolean {
+  try {
+    return native?.requestBatteryExemption?.() ?? false;
   } catch {
     return false;
   }

@@ -63,6 +63,17 @@ class KarakeepModeService : VpnService() {
         .addRoute("::", 0)
         // Karakeep garde son accès normal au réseau.
         .addDisallowedApplication(packageName)
+      // Le gestionnaire de téléchargements d'Android télécharge les modèles
+      // pour le compte de Karakeep, mais c'est un composant du système, pas
+      // Karakeep : le bloquer, c'était bloquer les téléchargements (bug du
+      // 1er novembre). Il passe donc lui aussi.
+      for (pkg in DOWNLOAD_PROVIDERS) {
+        try {
+          builder.addDisallowedApplication(pkg)
+        } catch (_: Exception) {
+          // Absent sur ce téléphone.
+        }
+      }
       tun = builder.establish()
       Preferences.saveModeActive(this, tun != null)
       // Comme le mode avion : appels refusés (voir KarakeepCallScreener) et
@@ -104,6 +115,12 @@ class KarakeepModeService : VpnService() {
   }
 
   companion object {
+    private val DOWNLOAD_PROVIDERS = listOf(
+      "com.android.providers.downloads",
+      "com.google.android.providers.downloads",
+      "com.android.providers.downloads.ui",
+    )
+
     const val ACTION_STOP = "expo.modules.karakeepworker.STOP_KARAKEEP_MODE"
 
     /** L'utilisateur a-t-il déjà autorisé l'application à être le VPN ? */

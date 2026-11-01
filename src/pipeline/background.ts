@@ -4,7 +4,7 @@ import { AppState } from "react-native";
 
 import { recordBackgroundRun } from "./heartbeat";
 import { isQueueLockHeld } from "./lock";
-import { countPendingWork } from "../db/bookmarks";
+import { countPendingWork, pendingSnapshot } from "../db/bookmarks";
 import { processPending } from "./queue";
 
 /**
@@ -54,7 +54,7 @@ TaskManager.defineTask(AI_QUEUE_TASK, async () => {
 
     const before = await countPendingWork();
     if (before === 0) {
-      await recordBackgroundRun("Rien à traiter.");
+      await recordBackgroundRun(`Réveil Android : rien à traiter — ${await pendingSnapshot()}.`);
       return BackgroundTask.BackgroundTaskResult.Success;
     }
 

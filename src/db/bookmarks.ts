@@ -369,6 +369,18 @@ export async function resetInterruptedWork(): Promise<{
  * On compte les favoris, pas les étapes : un lien à extraire *et* à analyser
  * en est un seul aux yeux de l'utilisateur.
  */
+/** Détail de la file, pour le journal : ce qui attend, étape par étape. */
+export async function pendingSnapshot(): Promise<string> {
+  const db = await getDb();
+  const r = await db.getFirstAsync<{ f: number | null; a: number | null; w: number | null }>(
+    `SELECT SUM(fetch_status IN ('pending', 'running')) AS f,
+            SUM(ai_status IN ('pending', 'running')) AS a,
+            SUM(ai_status IN ('pending', 'running') AND fetch_status <> 'success') AS w
+       FROM bookmarks`,
+  );
+  return `pages à lire ${r?.f ?? 0}, analyses ${r?.a ?? 0} (dont ${r?.w ?? 0} attendent leur page)`;
+}
+
 export async function countPendingWork(): Promise<number> {
   const db = await getDb();
   const row = await db.getFirstAsync<{ n: number }>(

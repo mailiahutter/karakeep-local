@@ -17,16 +17,19 @@ class AlarmReceiver : BroadcastReceiver() {
   override fun onReceive(context: Context, intent: Intent?) {
     val kind = intent?.getStringExtra(WorkerService.EXTRA_KIND) ?: WorkerService.KIND_NIGHT
     if (kind == WorkerService.KIND_MORNING) {
-      if (Preferences.isModeAuto(context)) KarakeepModeService.stop(context)
+      // Alarme d'une version précédente : le mode ne se coupe plus seul le
+      // matin (retour du 1er novembre), il reste actif jusqu'à ce qu'on le
+      // désactive.
       return
     }
     // La nuit tombe : le mode Karakeep, s'il est automatique, coupe internet
-    // pour les autres applications, jusqu'à 7 h.
+    // pour les autres applications — et le reste jusqu'à ce qu'on le coupe
+    // depuis le bouton des réglages rapides.
     if (kind == WorkerService.KIND_NIGHT && Preferences.isModeAuto(context) &&
       intent?.getBooleanExtra(AlarmScheduler.EXTRA_RETRY, false) != true
     ) {
       try {
-        if (KarakeepModeService.start(context)) AlarmScheduler.scheduleMorning(context)
+        if (KarakeepModeService.start(context)) Preferences.saveModeActive(context, true)
       } catch (e: Exception) {
         Log.w("KarakeepWorker", "Mode Karakeep non activé", e)
       }

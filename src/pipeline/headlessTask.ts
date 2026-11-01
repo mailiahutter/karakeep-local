@@ -1,6 +1,6 @@
 import { AppRegistry } from "react-native";
 
-import { countPendingWork } from "../db/bookmarks";
+import { countPendingWork, pendingSnapshot } from "../db/bookmarks";
 import { recordBackgroundRun } from "./heartbeat";
 import { isQueueLockHeld } from "./lock";
 import { isProcessing, processPending } from "./queue";
@@ -52,7 +52,7 @@ export async function runHeadlessSession(data: SessionData = {}): Promise<void> 
 
   const before = await countPendingWork();
   if (before === 0) {
-    await recordBackgroundRun("Séance : rien à traiter.");
+    await recordBackgroundRun(`Séance (${kind}) : rien à traiter — ${await pendingSnapshot()}.`);
     return;
   }
 
@@ -61,7 +61,7 @@ export async function runHeadlessSession(data: SessionData = {}): Promise<void> 
   // seulement les pages. Débrancher en pleine nuit l'arrête aussitôt.
   const analyse = kind === "night" && isCharging();
   await recordBackgroundRun(
-    `${label} démarré(e), ${before} lien(s) en attente${
+    `${label} démarré(e) — ${await pendingSnapshot()}${
       analyse ? "" : kind === "night" ? " — téléphone sur batterie : lecture des pages seulement, analyse reportée" : " — lecture des pages seulement"
     }.`,
   );

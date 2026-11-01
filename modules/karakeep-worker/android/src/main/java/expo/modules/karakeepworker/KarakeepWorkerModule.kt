@@ -38,7 +38,29 @@ class KarakeepWorkerModule : Module() {
         "auto" to Preferences.isModeAuto(context),
         "blocksCalls" to QuietControl.screensCalls(context),
         "quietAccess" to QuietControl.hasAccess(context),
+        "batteryExempt" to (context.getSystemService(Context.POWER_SERVICE) as PowerManager)
+          .isIgnoringBatteryOptimizations(context.packageName),
       )
+    }
+
+    /**
+     * Demande directement l'exemption d'optimisation de batterie (une fenêtre
+     * d'Android, un toucher). Sans elle, Android peut couper le réseau de
+     * l'application en veille profonde, séance de nuit comprise.
+     */
+    Function("requestBatteryExemption") {
+      val intent = android.content.Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
+        .setData(android.net.Uri.parse("package:${context.packageName}"))
+        .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+      try {
+        context.startActivity(intent)
+      } catch (e: Exception) {
+        context.startActivity(
+          android.content.Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+            .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
+      }
+      true
     }
 
     /** Demande le rôle de filtre d'appels (Android 10 et +). */

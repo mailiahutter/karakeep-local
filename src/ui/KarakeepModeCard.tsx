@@ -6,6 +6,7 @@ import { Alert, AppState, StyleSheet, Switch, Text, View } from "react-native";
 import {
   modeStatus,
   requestAddTile,
+  requestBatteryExemption,
   requestCallBlocking,
   requestModePermission,
   requestQuietAccess,
@@ -58,8 +59,15 @@ export function KarakeepModeCard({ nightStart }: { nightStart: string }) {
         pages la nuit. Pour tout le reste, comme en mode avion : internet coupé
         aux autres applications, appels entrants refusés (messagerie), SMS et
         notifications en silence jusqu'au matin. Le réveil sonne toujours, et
-        on peut toujours appeler, y compris les urgences.
+        on peut toujours appeler, y compris les urgences. Le mode reste actif
+        jusqu'à ce que tu le désactives.
       </Text>
+      <Requirement
+        done={!!status.batteryExempt}
+        label="Garder le réseau en veille (hors optimisation de batterie)"
+        action="Autoriser"
+        onPress={() => void requestBatteryExemption()}
+      />
       <Requirement
         done={status.permitted}
         label="Couper internet aux autres applications"
@@ -98,7 +106,8 @@ export function KarakeepModeCard({ nightStart }: { nightStart: string }) {
         <View style={{ flex: 1, gap: 2 }}>
           <Text style={[styles.label, { color: t.text }]}>Automatique chaque nuit</Text>
           <Text style={[styles.hint, { color: t.textMuted }]}>
-            Activé à {nightStart || "l'heure de la séance"}, coupé à 7 h.
+            Activé à {nightStart || "l'heure de la séance"}, et le reste jusqu'à
+            ce que tu le coupes avec le bouton des réglages rapides.
           </Text>
         </View>
         <Switch
