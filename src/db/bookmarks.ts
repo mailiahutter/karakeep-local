@@ -1,7 +1,7 @@
 import * as Crypto from "expo-crypto";
 
 import { getDb } from "./client";
-import { REQUEUE_AI, REQUEUE_FETCH } from "./requeue.sql";
+import { FULL_REVIEW, REQUEUE_AI, REQUEUE_FETCH } from "./requeue.sql";
 import { planRetry, retryMessage } from "../pipeline/retryPlan";
 import { toFtsQuery } from "./fts";
 import { normalizeUrl } from "./urls";
@@ -413,6 +413,13 @@ export async function requeueAutoClassified(): Promise<number> {
  * vide, analyse sautée ou incomplète. Renvoie le nombre de liens désormais
  * en attente.
  */
+/** Revue complète (voir `FULL_REVIEW`). Renvoie le nombre de liens repris. */
+export async function requeueFullReview(): Promise<number> {
+  const db = await getDb();
+  const result = await db.runAsync(FULL_REVIEW);
+  return result.changes;
+}
+
 export async function requeueUnfinished(): Promise<number> {
   const db = await getDb();
   await db.withTransactionAsync(async () => {

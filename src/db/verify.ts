@@ -180,7 +180,7 @@ export async function fileByUser(
 
   await assignTheme(id, themeId, subthemeId, "human");
   const db = await getDb();
-  await db.runAsync("UPDATE bookmarks SET verified_at = ? WHERE id = ?", [Date.now(), id]);
+  await db.runAsync("UPDATE bookmarks SET verified_at = ?, force_review = 0 WHERE id = ?", [Date.now(), id]);
 
   if (!before || before.themeSource === "human") return;
   const aiWasRight = before.themeId === themeId;

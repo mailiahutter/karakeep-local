@@ -4,8 +4,8 @@
  */
 
 /**
- * Idées à vérifier : rangées par l'IA sans assez de certitude, ou pas
- * rangées du tout. La plus douteuse d'abord. Une certitude non mesurée
+ * Idées à vérifier : rangées par l'IA sans assez de certitude, pas rangées
+ * du tout, ou soumises à la revue complète (`force_review`). La plus douteuse d'abord. Une certitude non mesurée
  * (analyse antérieure) ne compte pas comme un doute : elle sera mesurée à la
  * prochaine analyse.
  */
@@ -15,8 +15,9 @@ export const DOUBTS = `
      AND ai_status = 'success'
      AND verified_at IS NULL
      AND (theme_source IS NULL OR theme_source <> 'human')
-     AND (theme_id IS NULL OR (ai_confidence IS NOT NULL AND ai_confidence < ?))
-   ORDER BY CASE WHEN theme_id IS NULL THEN -1 ELSE ai_confidence END ASC, created_at DESC
+     AND (theme_id IS NULL OR force_review = 1
+          OR (ai_confidence IS NOT NULL AND ai_confidence < ?))
+   ORDER BY CASE WHEN theme_id IS NULL THEN -1 ELSE COALESCE(ai_confidence, 1) END ASC, created_at DESC
    LIMIT ?`;
 
 export const COUNT_DOUBTS = `
@@ -25,7 +26,8 @@ export const COUNT_DOUBTS = `
      AND ai_status = 'success'
      AND verified_at IS NULL
      AND (theme_source IS NULL OR theme_source <> 'human')
-     AND (theme_id IS NULL OR (ai_confidence IS NOT NULL AND ai_confidence < ?))`;
+     AND (theme_id IS NULL OR force_review = 1
+          OR (ai_confidence IS NOT NULL AND ai_confidence < ?))`;
 
 /** Rangé seul par l'IA depuis un instant donné, avec assez de certitude. */
 export const FILED_SINCE = `
@@ -34,6 +36,7 @@ export const FILED_SINCE = `
      AND ai_status = 'success'
      AND theme_source = 'ai'
      AND theme_id IS NOT NULL
+     AND force_review = 0
      AND (ai_confidence IS NULL OR ai_confidence >= ?)
      AND analysed_at > ?
    ORDER BY analysed_at DESC

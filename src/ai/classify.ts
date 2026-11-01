@@ -130,6 +130,7 @@ Dans laquelle de ces catégories le ranger ?
 ${list}
 0. ${noneLabel}
 
+Range selon le sujet principal du lien, pas selon un mot isolé. Si aucune catégorie ne lui correspond vraiment, réponds 0 plutôt que de forcer : un lien mal rangé est pire qu'un lien à ranger.
 Réponds par le seul numéro. N'écris rien d'autre.`;
 }
 
@@ -368,7 +369,10 @@ export function nearestVote(
 
 /** Seuils au-delà desquels le vote des voisins l'emporte sur un modèle hésitant. */
 export const VOTE_MIN_SHARE = 0.6;
-export const VOTE_MIN_SIMILARITY = 0.55;
+// 0,55 laissait voter des voisins sans rapport : avec EmbeddingGemma, deux
+// textes quelconques en français dépassent souvent 0,5. Le vote ne doit
+// trancher que sur des liens vraiment semblables.
+export const VOTE_MIN_SIMILARITY = 0.72;
 export const VOTE_MIN_NEIGHBOURS = 3;
 
 /**

@@ -44,3 +44,15 @@ export const REQUEUE_AI = `
                 OR summary IS NULL OR trim(summary) = ''
                 OR subject IS NULL OR trim(subject) = ''))
      )`;
+
+/**
+ * Revue complète, à la demande : tout ce que l'IA a rangé seule repasse — vue
+ * et écoute des médias comprises — et chaque résultat attend la validation
+ * de l'utilisateur dans « À vérifier ». Même effet que la migration 017.
+ */
+export const FULL_REVIEW = `
+  UPDATE bookmarks
+     SET ai_status = 'pending', ai_error = NULL, media_description = NULL,
+         verified_at = NULL, force_review = 1
+   WHERE archived = 0
+     AND (theme_source IS NULL OR theme_source <> 'human')`;

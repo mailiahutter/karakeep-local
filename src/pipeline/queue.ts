@@ -16,7 +16,7 @@ import { analyseBookmark } from "../ai/classification";
 import { assignTheme, isHumanClassified, listThemes } from "../db/themes";
 import { isModelInstalled } from "../ai/download";
 import { findModel } from "../ai/models";
-import { modelPathFor } from "../ai/download";
+import { downloadModel, modelPathFor } from "../ai/download";
 import {
   clearFetchAttempts,
   deferFetch,
@@ -37,6 +37,8 @@ import { listClassificationExamples } from "../db/examples";
 import { withOcr } from "../archive/ocrText";
 import { ensureOcr } from "./ocr";
 import { ensurePerception } from "./perceive";
+import { recordBackgroundRun } from "./heartbeat";
+import { projectorDescriptor } from "../ai/models";
 import { withPerception } from "../ai/perception";
 import { refreshYtdlpWeekly } from "./ytdlpUpdate";
 import { saveClassificationMeta } from "../db/verify";
@@ -191,6 +193,20 @@ async function runTagStage(deadline: () => boolean): Promise<number> {
 
   void ensureEmbedderDownloaded();
 
+  // Un modèle qui sait regarder et écouter, mais dont le projecteur n'est
+  // pas encore téléchargé, rangerait à l'aveugle — c'est exactement ce qui a
+  // mis des bons plans Amazon dans « Desserts ». On attend qu'il soit là.
+  const projector = projectorDescriptor(model);
+  if (projector && !(await isModelInstalled(projector))) {
+    await recordBackgroundRun(
+      "Analyse reportée : la partie « vision et son » du modèle n'est pas encore téléchargée.",
+    );
+    downloadModel(projector, () => {})
+      .then((task) => task.promise.catch(() => {}))
+      .catch(() => {});
+    return 0;
+  }
+
   const modelPath = modelPathFor(model);
   // Les critères appris d'abord : les liens rangés juste après en profitent.
   await refreshLearnedCriteria(modelPath, deadline).catch(() => 0);
@@ -220,7 +236,14 @@ async function runTagStage(deadline: () => boolean): Promise<number> {
       // s'exécute que s'il reste du temps.
       // Ce que disent la légende, le texte des images, et — si le modèle sait
       // regarder et écouter — ce que montrent les photos et la vidéo.
-      const perception = await ensurePerception(bookmark, model, AI_TIMEOUTS.summary).catch(() => null);
+      const perception = await ensurePerception(bookmark, model, AI_TIMEOUTS.summary).catch(
+        async (err: Error) => {
+          // Visible dans le journal : sans cela, une vision en panne passait
+          // pour une analyse normale, rangée à l'aveugle.
+          await recordBackgroundRun(`Vision et son impossibles : ${err.message}`);
+          return null;
+        },
+      );
       const enriched = withPerception(
         withOcr(bookmark.content, await ensureOcr(bookmark.id).catch(() => null)),
         perception,

@@ -31,6 +31,9 @@ export async function buildDiagnosticReport(): Promise<string> {
       SUM(ai_status = 'error') AS ai_error,
       SUM(ai_status = 'skipped') AS ai_skipped,
       SUM(theme_id IS NULL AND ai_status = 'success') AS unfiled,
+      SUM(media_description IS NOT NULL AND media_description <> '') AS seen,
+      SUM(media_description = '') AS nothing_to_see,
+      SUM(force_review = 1 AND verified_at IS NULL) AS to_review,
       COUNT(*) AS total
     FROM bookmarks WHERE archived = 0`);
   const errors = await db.getAllAsync<{ e: string; n: number }>(`
@@ -68,6 +71,8 @@ export async function buildDiagnosticReport(): Promise<string> {
     `Pages à lire : ${c("fetch_pending")} (en cours : ${c("fetch_running")}, réessai prévu : ${c("fetch_retry")}, disparues : ${c("gone")})`,
     `Analyses à faire : ${c("ai_pending")} dont ${c("ai_waiting_fetch")} attendent la lecture de leur page`,
     `Analyses en erreur : ${c("ai_error")} — sautées : ${c("ai_skipped")} — rangées sans tiroir : ${c("unfiled")}`,
+    `Images et vidéos décrites par l'IA : ${c("seen")} (rien à regarder : ${c("nothing_to_see")})`,
+    `Revue complète : ${c("to_review")} à valider dans « À vérifier »`,
     ...(errors.length ? ["", "## Erreurs les plus fréquentes", ...errors.map((e) => `${e.n} × ${e.e ?? "?"}`)] : []),
     "",
     "## Derniers réveils",

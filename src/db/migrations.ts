@@ -500,4 +500,24 @@ export const MIGRATIONS: string[] = [
      AND EXISTS (SELECT 1 FROM assets a WHERE a.bookmark_id = bookmarks.id
                    AND a.kind IN ('image', 'video'));
   `,
+
+  // 017 — version 3.5 : revue complète.
+  //
+  // Retour du 1er novembre : « c'est le foutoir partout, il faut tout revoir
+  // avec une IA compétente qui écoute vraiment les vidéos, scanne les
+  // images ». Les rangements faits avant que Gemma 4 soit disponible l'ont
+  // été par un modèle aveugle et sourd, parfois sur une légende vide.
+  //
+  // Tout ce que l'IA avait rangé seule repart : nouvelle lecture des images
+  // et du son, nouvelle analyse. `force_review` fait passer chaque résultat
+  // par « À vérifier », même sûr de lui, jusqu'à ce que l'utilisateur l'ait
+  // validé ou corrigé d'un toucher. Ce qu'il a rangé lui-même ne bouge pas.
+  `
+  ALTER TABLE bookmarks ADD COLUMN force_review INTEGER NOT NULL DEFAULT 0;
+  UPDATE bookmarks
+     SET ai_status = 'pending', ai_error = NULL, media_description = NULL,
+         verified_at = NULL, force_review = 1
+   WHERE archived = 0
+     AND (theme_source IS NULL OR theme_source <> 'human');
+  `,
 ];

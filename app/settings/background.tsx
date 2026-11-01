@@ -5,7 +5,7 @@ import { useFocusEffect } from "expo-router";
 import { useCallback, useState } from "react";
 import { Alert, ScrollView, Share, StyleSheet, Text, TextInput, View } from "react-native";
 
-import { countPendingWork, requeueUnfinished } from "../../src/db/bookmarks";
+import { countPendingWork, requeueFullReview, requeueUnfinished } from "../../src/db/bookmarks";
 import { processPending } from "../../src/pipeline/queue";
 import { notifyBookmarksChanged } from "../../src/ui/events";
 import { loadSettings, saveSetting } from "../../src/db/settings";
@@ -124,6 +124,40 @@ export default function BackgroundScreen() {
             }
             setWorking(true);
           }}
+        />
+      </Card>
+
+      <Card>
+        <Row>
+          <Ionicons name="eye-outline" size={19} color={t.accent} />
+          <Text style={[styles.stat, { color: t.text }]}>Revue complète</Text>
+        </Row>
+        <Text style={[styles.hint, { color: t.textMuted }]}>
+          Tout ce que l'IA a rangé seule repart de zéro : elle regarde de
+          nouveau les images, écoute les vidéos, puis range. Chaque résultat
+          t'attend ensuite dans « À vérifier », même quand elle est sûre
+          d'elle : un toucher pour valider ou corriger. Ce que tu as rangé
+          toi-même ne bouge pas. L'analyse se fait la nuit, téléphone branché.
+        </Text>
+        <Button
+          label="Lancer la revue complète"
+          icon="eye"
+          variant="secondary"
+          onPress={() =>
+            Alert.alert("Revue complète ?", "Tout ce que l'IA a rangé seule sera réanalysé cette nuit, puis soumis à ta validation.", [
+              { text: "Annuler", style: "cancel" },
+              {
+                text: "Lancer",
+                onPress: () =>
+                  void (async () => {
+                    const n = await requeueFullReview();
+                    setPending(await countPendingWork());
+                    notifyBookmarksChanged();
+                    Alert.alert("Revue programmée", `${n} lien${n > 1 ? "s" : ""} seront réanalysés cette nuit.`);
+                  })(),
+              },
+            ])
+          }
         />
       </Card>
 

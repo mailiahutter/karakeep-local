@@ -199,6 +199,20 @@ export default function BookmarkScreen() {
         onClose={() => setReminding(false)}
       />
 
+      {bookmark.mediaDescription && (
+        <Card>
+          <Row>
+            <Ionicons name="eye-outline" size={16} color={t.accent} />
+            <Text style={[styles.sectionLabel, { color: t.accent }]}>
+              Ce que l'IA a vu et entendu
+            </Text>
+          </Row>
+          <Text style={[styles.description, { color: t.text }]}>
+            {bookmark.mediaDescription}
+          </Text>
+        </Card>
+      )}
+
       {bookmark.summary && (
         <Card style={{ borderColor: t.accent }}>
           <Row>

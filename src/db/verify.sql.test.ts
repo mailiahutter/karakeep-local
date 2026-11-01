@@ -52,3 +52,12 @@ test("chaque tiroir a son compte, ses nouveautés et sa couverture", () => {
   assert.equal(chien.fresh, 3);
   assert.equal(rows.find((r) => r.id === "u")!.cover, null);
 });
+
+test("la revue complète fait passer par « À vérifier » même un rangement sûr", () => {
+  const db = seeded();
+  db.exec("UPDATE bookmarks SET force_review = 1 WHERE id = 'sur'");
+  const ids = db.prepare(DOUBTS).all(0.75, 10).map((r) => r.id);
+  assert.ok(ids.includes("sur"));
+  const filed = db.prepare(FILED_SINCE).all(0.75, 5, 10).map((r) => r.id);
+  assert.ok(!filed.includes("sur"));
+});

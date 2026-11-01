@@ -39,6 +39,7 @@ export interface BookmarkRow {
   theme_source: "ai" | "human" | null;
   next_fetch_at?: number | null;
   source_gone?: number;
+  media_description?: string | null;
 }
 
 export interface Tag {
@@ -93,6 +94,8 @@ export interface Bookmark {
    * reste consultable : c'est précisément pour cela qu'on archive.
    */
   sourceGone: boolean;
+  /** Ce que le modèle a vu dans les images et entendu dans la vidéo. */
+  mediaDescription: string | null;
   tags: Tag[];
 }
 
@@ -131,6 +134,7 @@ export function rowToBookmark(
     themeSource: row.theme_source ?? null,
     nextFetchAt: row.next_fetch_at ?? null,
     sourceGone: row.source_gone === 1,
+    mediaDescription: row.media_description || null,
     tags,
   };
 }

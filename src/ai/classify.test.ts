@@ -234,6 +234,7 @@ test("le vote des voisins désigne la catégorie majoritaire", async () => {
 test("un vote net corrige un modèle hésitant, jamais un modèle sûr", async () => {
   const { arbitrate } = await import("./classify.ts");
   const vote = { optionId: "chien", share: 0.8, best: 0.9 };
+  assert.equal(arbitrate({ id: "van", confidence: 0.4 }, { ...vote, best: 0.6 }, 5).id, "van");
   assert.deepEqual(arbitrate({ id: "van", confidence: 0.4 }, vote, 5), { id: "chien", confidence: 0.72, byVote: true });
   assert.equal(arbitrate({ id: "van", confidence: 0.9 }, vote, 5).id, "van");
   assert.equal(arbitrate({ id: null, confidence: null }, vote, 5).id, "chien");

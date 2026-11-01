@@ -71,7 +71,7 @@ export default function VerifyScreen() {
 
   const leaveUnsorted = async (id: string) => {
     const db = await getDb();
-    await db.runAsync("UPDATE bookmarks SET verified_at = ? WHERE id = ?", [Date.now(), id]);
+    await db.runAsync("UPDATE bookmarks SET verified_at = ?, force_review = 0 WHERE id = ?", [Date.now(), id]);
     done(id);
   };
 
