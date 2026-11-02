@@ -140,6 +140,15 @@ jobs:
           fi
           echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.keystore"
 
+      # Gradle tournait avec 2 Go de tas et 512 Mo de métaespace : l'empaquetage
+      # de l'APK (Python, FFmpeg, llama.cpp, non compressés) a fini par en
+      # manquer — échec de la 3.5.1 dans `packageRelease`. Le runner a 16 Go.
+      - name: Donner de la mémoire à Gradle
+        working-directory: android
+        run: |
+          echo "org.gradle.jvmargs=-Xmx6g -XX:MaxMetaspaceSize=1536m -Dfile.encoding=UTF-8" >> gradle.properties
+          grep jvmargs gradle.properties
+
       - name: Construire l'APK signée
         working-directory: android
         env:
