@@ -38,6 +38,7 @@ import { withOcr } from "../archive/ocrText";
 import { ensureOcr } from "./ocr";
 import { ensurePerception } from "./perceive";
 import { recordBackgroundRun } from "./heartbeat";
+import { recordModelFailure, recordModelSuccess } from "../ai/modelHealth";
 import { projectorDescriptor } from "../ai/models";
 import { withPerception } from "../ai/perception";
 import { refreshYtdlpWeekly } from "./ytdlpUpdate";
@@ -182,12 +183,17 @@ async function runTagStage(deadline: () => boolean): Promise<number> {
 
   const model = findModel(settings.modelId);
   if (!model || !(await isModelInstalled(model))) {
-    // Aucun modèle installé : on marque les favoris comme non traités plutôt
-    // que de les laisser en 'pending' et de rejouer indéfiniment.
-    const batch = await pendingBookmarks("ai_status", 50);
-    for (const b of batch) {
-      await setAiStatus(b.id, "skipped", "Aucun modèle installé");
+    // Modèle pas encore là (téléchargement en cours, relève qui arrive) : les
+    // liens restent en attente. Les marquer « sautés » les faisait sortir de
+    // la file, et il fallait ensuite tout relancer à la main.
+    if (model) {
+      downloadModel(model, () => {})
+        .then((task) => task.promise.catch(() => {}))
+        .catch(() => {});
     }
+    await recordBackgroundRun(
+      `Analyse reportée : le modèle ${model?.label ?? settings.modelId} n'est pas encore téléchargé.`,
+    );
     return 0;
   }
 
@@ -342,7 +348,18 @@ async function runTagStage(deadline: () => boolean): Promise<number> {
       if (summary) await setSummary(bookmark.id, summary);
 
       await setAiStatus(bookmark.id, "success");
+      await recordModelSuccess(model.id);
     } catch (err) {
+      if ((err as Error).name === "ModelIncompatibleError") {
+        // Ce n'est pas la faute du lien : il repassera avec un modèle qui
+        // fonctionne. Au deuxième échec, on change de modèle et on s'arrête
+        // là pour cette séance — le nouveau doit d'abord être chargé.
+        await setAiStatus(bookmark.id, "pending");
+        const switched = await recordModelFailure(model.id, (err as Error).message);
+        await recordBackgroundRun(switched ?? `Échec du moteur avec ${model.label} : ${(err as Error).message}`);
+        if (switched) break;
+        continue;
+      }
       // Le rangement et les tags déjà obtenus sont conservés : l'échec d'une
       // étape ne doit pas effacer celles qui ont abouti.
       const message = `Analyse incomplète : ${(err as Error).message}`;

@@ -3,6 +3,7 @@ import { loadSettings } from "../db/settings";
 import { findModel } from "../ai/models";
 import { isModelInstalled } from "../ai/download";
 import { isEmbedderInstalled } from "../ai/embed";
+import { brokenModels } from "../ai/modelHealth";
 import { readBackgroundLog } from "./heartbeat";
 import { connectionKind } from "../ai/download";
 import { currentBuild, currentVersion } from "../update/updater";
@@ -65,6 +66,7 @@ export async function buildDiagnosticReport(): Promise<string> {
     "## Modèles",
     `Modèle : ${model?.label ?? settings.modelId} — ${model && (await isModelInstalled(model)) ? "installé" : "PAS INSTALLÉ"}`,
     `Modèle de proximité : ${(await isEmbedderInstalled()) ? "installé" : "absent"}`,
+    `Modèles en échec sur ce téléphone : ${(await brokenModels()).join(", ") || "aucun"}`,
     "",
     "## File",
     `Liens : ${c("total")}`,

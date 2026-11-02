@@ -8,6 +8,7 @@ import {
 } from "./download";
 import { RECOMMENDED_MODEL_ID, SUPERSEDED_MODEL_IDS, findModel, projectorDescriptor } from "./models";
 import { loadSettings, saveSetting } from "../db/settings";
+import { brokenModels } from "./modelHealth";
 
 /**
  * Passage automatique au modèle recommandé.
@@ -29,6 +30,8 @@ export async function upgradeModelIfNeeded(): Promise<void> {
     if (!SUPERSEDED_MODEL_IDS.includes(settings.modelId)) return;
     const target = findModel(RECOMMENDED_MODEL_ID);
     if (!target) return;
+    // Jamais de retour vers un modèle qui a échoué sur ce téléphone.
+    if ((await brokenModels()).includes(target.id)) return;
 
     const projector = projectorDescriptor(target);
     const ready =

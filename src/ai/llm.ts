@@ -214,58 +214,108 @@ export async function complete(
   );
 
   inFlight++;
-  let produced = 0;
   try {
-    const run = ctx.completion(
-      {
-        messages: [
-          { role: "system", content: options.system },
-          { role: "user", content: userContent(options) },
-        ],
-        // Les modèles récents savent « réfléchir » avant de répondre : utile
-        // ailleurs, ruineux ici, et cela casserait la lecture d'un numéro.
-        enable_thinking: false,
-        n_predict: options.maxTokens ?? 256,
-        // Température basse : le tagging doit être stable d'une exécution à l'autre.
-        temperature: 0.2,
-        top_p: 0.9,
-        ...(options.nProbs ? { n_probs: options.nProbs } : {}),
-        ...(options.jsonSchema
-          ? {
-              response_format: {
-                type: "json_schema" as const,
-                json_schema: { strict: true, schema: options.jsonSchema },
-              },
-            }
-          : {}),
-      },
-      () => {
-        produced++;
-        options.onToken?.(produced);
-      },
-    );
-
-    const budget = options.timeoutMs;
-    if (budget === undefined) {
-      const result = (await run) as RawResult;
-      if (result.completion_probabilities) options.onProbabilities?.(result.completion_probabilities);
-      return result.content || result.text || "";
+    // Le gabarit de conversation du modèle d'abord (« jinja »), puis, s'il
+    // fait planter le moteur, la mise en forme intégrée à llama.cpp. Le
+    // 1er novembre, Gemma 4 a fait échouer 40 analyses sur 40 avec
+    // « Exception in HostFunction: <unknown> », une erreur levée pendant la
+    // mise en forme de la conversation : la seconde voie la contourne. Ce
+    // qui marche est retenu pour ce modèle.
+    const preferred = formatFor.get(modelPath) ?? "jinja";
+    try {
+      const text = await attempt(ctx, options, preferred);
+      formatFor.set(modelPath, preferred);
+      return text;
+    } catch (err) {
+      if (!isEngineCrash(err) || preferred === "plain") throw err;
+      const text = await attempt(ctx, options, "plain").catch((second: unknown) => {
+        throw new ModelIncompatibleError(err, second);
+      });
+      formatFor.set(modelPath, "plain");
+      return text;
     }
-
-    // Le délai écoulé, on demande l'arrêt puis on récupère ce qui a été
-    // produit : sur une réponse d'un seul nombre, le début suffit souvent.
-    // Rejeter sans attendre laisserait l'inférence tourner en fond.
-    const outcome = await raceStop(run as Promise<RawResult>, budget, ctx);
-    if (outcome.probs) options.onProbabilities?.(outcome.probs);
-    // Une vraie erreur du moteur ne doit pas être maquillée en dépassement de
-    // délai : le message reçu est la seule piste dont dispose l'utilisateur.
-    if (outcome.error) throw outcome.error;
-    if (outcome.text === null) throw new InferenceTimeoutError(budget);
-    return outcome.text;
   } finally {
     inFlight--;
     scheduleRelease();
   }
+}
+
+/** Mise en forme qui fonctionne, par modèle (voir `complete`). */
+const formatFor = new Map<string, "jinja" | "plain">();
+
+/** Erreur du moteur natif lui-même, et non du contenu de la demande. */
+function isEngineCrash(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err);
+  return /HostFunction|chat template|jinja|template/i.test(message);
+}
+
+/** Le modèle ne fonctionne avec aucune des deux mises en forme. */
+export class ModelIncompatibleError extends Error {
+  constructor(first: unknown, second: unknown) {
+    const a = first instanceof Error ? first.message : String(first);
+    const b = second instanceof Error ? second.message : String(second);
+    super(`Modèle incompatible avec le moteur de l'application (${a} ; puis ${b})`);
+    this.name = "ModelIncompatibleError";
+  }
+}
+
+async function attempt(
+  ctx: LlamaContext,
+  options: CompletionOptions,
+  format: "jinja" | "plain",
+): Promise<string> {
+  let produced = 0;
+  const run = ctx.completion(
+    {
+      messages: [
+        { role: "system", content: options.system },
+        { role: "user", content: userContent(options) },
+      ],
+      ...(format === "jinja"
+        ? {
+            // Les modèles récents savent « réfléchir » avant de répondre :
+            // utile ailleurs, ruineux ici, et cela casserait la lecture
+            // d'un numéro.
+            enable_thinking: false,
+          }
+        : { jinja: false }),
+      n_predict: options.maxTokens ?? 256,
+      // Température basse : le tagging doit être stable d'une exécution à l'autre.
+      temperature: 0.2,
+      top_p: 0.9,
+      ...(options.nProbs ? { n_probs: options.nProbs } : {}),
+      ...(options.jsonSchema
+        ? {
+            response_format: {
+              type: "json_schema" as const,
+              json_schema: { strict: true, schema: options.jsonSchema },
+            },
+          }
+        : {}),
+    },
+    () => {
+      produced++;
+      options.onToken?.(produced);
+    },
+  );
+
+  const budget = options.timeoutMs;
+  if (budget === undefined) {
+    const result = (await run) as RawResult;
+    if (result.completion_probabilities) options.onProbabilities?.(result.completion_probabilities);
+    return result.content || result.text || "";
+  }
+
+  // Le délai écoulé, on demande l'arrêt puis on récupère ce qui a été
+  // produit : sur une réponse d'un seul nombre, le début suffit souvent.
+  // Rejeter sans attendre laisserait l'inférence tourner en fond.
+  const outcome = await raceStop(run as Promise<RawResult>, budget, ctx);
+  if (outcome.probs) options.onProbabilities?.(outcome.probs);
+  // Une vraie erreur du moteur ne doit pas être maquillée en dépassement de
+  // délai : le message reçu est la seule piste dont dispose l'utilisateur.
+  if (outcome.error) throw outcome.error;
+  if (outcome.text === null) throw new InferenceTimeoutError(budget);
+  return outcome.text;
 }
 
 /** Rejette si la promesse n'a pas abouti dans le temps imparti. */

@@ -520,4 +520,15 @@ export const MIGRATIONS: string[] = [
    WHERE archived = 0
      AND (theme_source IS NULL OR theme_source <> 'human');
   `,
+
+  // 018 — version 3.5.1 : relancer les analyses tombées en panne moteur.
+  //
+  // Le 1er novembre, 40 analyses sur 40 ont échoué avec Gemma 4 sur
+  // « Exception in HostFunction » — une panne du moteur, pas des liens. Elles
+  // repassent ; l'application sait désormais contourner la panne, ou changer
+  // de modèle si elle persiste.
+  `
+  UPDATE bookmarks SET ai_status = 'pending', ai_error = NULL
+   WHERE ai_status = 'error' AND ai_error LIKE '%HostFunction%';
+  `,
 ];

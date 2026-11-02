@@ -81,6 +81,23 @@ export const MODELS: ModelDescriptor[] = [
       "Même famille, deux fois plus de paramètres actifs : comprend mieux, mais demande un téléphone haut de gamme et beaucoup plus de temps.",
   },
   {
+    id: "gemma-3-4b-it-q4km",
+    label: "Gemma 3 4B — voit les images",
+    bytes: 2_489_757_856,
+    ramHint: "8 Go et plus",
+    speedHint: "environ 2 à 4 min par lien",
+    url: "https://huggingface.co/ggml-org/gemma-3-4b-it-GGUF/resolve/main/gemma-3-4b-it-Q4_K_M.gguf",
+    fileName: "gemma-3-4b-it-Q4_K_M.gguf",
+    projector: {
+      url: "https://huggingface.co/ggml-org/gemma-3-4b-it-GGUF/resolve/main/mmproj-model-f16.gguf",
+      fileName: "gemma-3-4b-it-mmproj-f16.gguf",
+      bytes: 851_251_104,
+    },
+    senses: ["image"],
+    notes:
+      "La génération précédente, éprouvée de longue date avec le moteur de l'application : elle regarde les photos et les images des vidéos, mais n'écoute pas le son. Prend le relais seule si Gemma 4 échoue sur ce téléphone.",
+  },
+  {
     id: "qwen3-4b-instruct-2507-q4km",
     label: "Qwen 3 4B Instruct (2507)",
     bytes: 2_497_280_736,
@@ -164,6 +181,8 @@ export function formatBytes(bytes: number): string {
 
 /** Modèle recommandé, et ceux qu'il remplace sans demander. */
 export const RECOMMENDED_MODEL_ID = "gemma-4-e2b-it-q4";
+/** Relève automatique quand un modèle échoue systématiquement sur l'appareil. */
+export const FALLBACK_MODEL_ID = "gemma-3-4b-it-q4km";
 export const SUPERSEDED_MODEL_IDS = ["qwen2.5-3b-instruct-q4km", "qwen3-4b-instruct-2507-q4km"];
 
 /** Le projecteur d'un modèle, sous la forme d'un téléchargement à part entière. */
