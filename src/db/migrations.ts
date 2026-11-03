@@ -531,4 +531,18 @@ export const MIGRATIONS: string[] = [
   UPDATE bookmarks SET ai_status = 'pending', ai_error = NULL
    WHERE ai_status = 'error' AND ai_error LIKE '%HostFunction%';
   `,
+
+  // 019 — version 3.6 : une analyse en échec n'est plus abandonnée.
+  //
+  // `ai_attempts` compte les échecs d'analyse d'un lien. Chaque nuit, sur
+  // secteur, ceux qui ont échoué moins de trois fois repassent seuls : une
+  // panne d'un soir ne condamne plus un lien pour toujours. Tout ce qui est
+  // en erreur aujourd'hui repart — la panne du moteur du 2 novembre
+  // (« Exception in HostFunction », « Cannot read property 'catch' ») est
+  // corrigée.
+  `
+  ALTER TABLE bookmarks ADD COLUMN ai_attempts INTEGER NOT NULL DEFAULT 0;
+  UPDATE bookmarks SET ai_status = 'pending', ai_error = NULL
+   WHERE ai_status IN ('error', 'running', 'skipped');
+  `,
 ];

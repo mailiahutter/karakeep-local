@@ -97,6 +97,11 @@ export const AI_TIMEOUTS = {
   /** Un numéro dans une liste de six. Court par nature. */
   choice: 60_000,
   summary: 180_000,
+  /**
+   * Regarder les photos et écouter le son : le plus long, car chaque image
+   * est lue sur le processeur avant même que le modèle commence à écrire.
+   */
+  perception: 360_000,
 } as const;
 
 /**

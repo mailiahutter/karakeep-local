@@ -92,6 +92,12 @@ export async function ensurePerception(
     const text = parsePerception(raw) ?? "";
     await saveDescription(bookmark.id, text);
     return text;
+  } catch (err) {
+    // Trop long pour ce téléphone : on n'y revient pas à chaque nuit, ce qui
+    // coûterait six minutes par lien pour le même résultat. Le lien est
+    // rangé d'après sa légende et le texte de ses images.
+    if ((err as Error).name === "InferenceTimeoutError") await saveDescription(bookmark.id, "");
+    throw err;
   } finally {
     await FileSystem.deleteAsync(work, { idempotent: true }).catch(() => {});
   }

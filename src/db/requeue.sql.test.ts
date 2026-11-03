@@ -3,7 +3,7 @@ import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
 
 import { MIGRATIONS } from "./migrations.ts";
-import { REQUEUE_AI, REQUEUE_FETCH } from "./requeue.sql.ts";
+import { REQUEUE_AI, REQUEUE_FETCH, RETRY_AI_ERRORS } from "./requeue.sql.ts";
 
 function migrated(upTo = MIGRATIONS.length): DatabaseSync {
   const db = new DatabaseSync(":memory:");
@@ -100,4 +100,26 @@ test("la migration 014 relit les publications Instagram sans média, même décl
   const gone = db.prepare("SELECT source_gone AS g, retry_days AS r FROM bookmarks WHERE id = 'ig-disparue'").get() as { g: number; r: number };
   assert.deepEqual({ ...gone }, { g: 0, r: 0 });
   db.close();
+});
+
+test("la nuit, une analyse en échec repasse, jusqu'à trois échecs", () => {
+  const db = migrated();
+  insert(db, "un-echec", { ai_status: "error", ai_attempts: 1 });
+  insert(db, "trois-echecs", { ai_status: "error", ai_attempts: 3 });
+  insert(db, "arretee", { ai_status: "running", ai_attempts: 0 });
+  insert(db, "rangee", {});
+  db.exec(RETRY_AI_ERRORS);
+  assert.equal(status(db, "un-echec").ai, "pending");
+  assert.equal(status(db, "trois-echecs").ai, "error");
+  assert.equal(status(db, "arretee").ai, "pending");
+  assert.equal(status(db, "rangee").ai, "success");
+});
+
+test("la migration 019 relance les analyses en panne du 2 novembre", () => {
+  const db = migrated(MIGRATIONS.length - 1);
+  insert(db, "panne", { ai_status: "error", ai_error: "Analyse incomplète : Cannot read property 'catch' of undefined" });
+  insert(db, "rangee", {});
+  db.exec(MIGRATIONS[MIGRATIONS.length - 1]);
+  assert.equal(status(db, "panne").ai, "pending");
+  assert.equal(status(db, "rangee").ai, "success");
 });

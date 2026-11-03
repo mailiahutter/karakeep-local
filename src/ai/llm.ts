@@ -1,5 +1,15 @@
 import { initLlama, type LlamaContext } from "llama.rn";
 
+import {
+  exclusive,
+  isOpaqueEngineError,
+  raceStop,
+  type RawResult,
+  type TokenProbs,
+} from "./engineQueue";
+
+export { isOpaqueEngineError };
+
 /**
  * Gestion du contexte llama.cpp embarqué.
  *
@@ -160,16 +170,8 @@ export interface CompletionOptions {
   audio?: string | null;
 }
 
-export interface TokenProbs {
-  content: string;
-  probs: { tok_str: string; prob: number }[];
-}
+export type { TokenProbs };
 
-type RawResult = {
-  content?: string;
-  text?: string;
-  completion_probabilities?: TokenProbs[];
-};
 
 /** Le modèle n'a rien produit dans le temps imparti. */
 export class InferenceTimeoutError extends Error {
@@ -215,29 +217,40 @@ export async function complete(
 
   inFlight++;
   try {
-    // Le gabarit de conversation du modèle d'abord (« jinja »), puis, s'il
-    // fait planter le moteur, la mise en forme intégrée à llama.cpp. Le
-    // 1er novembre, Gemma 4 a fait échouer 40 analyses sur 40 avec
-    // « Exception in HostFunction: <unknown> », une erreur levée pendant la
-    // mise en forme de la conversation : la seconde voie la contourne. Ce
-    // qui marche est retenu pour ce modèle.
-    const preferred = formatFor.get(modelPath) ?? "jinja";
-    try {
-      const text = await attempt(ctx, options, preferred);
-      formatFor.set(modelPath, preferred);
-      return text;
-    } catch (err) {
-      if (!isEngineCrash(err) || preferred === "plain") throw err;
-      const text = await attempt(ctx, options, "plain").catch((second: unknown) => {
-        throw new ModelIncompatibleError(err, second);
-      });
-      formatFor.set(modelPath, "plain");
-      return text;
-    }
+    // Une seule inférence à la fois dans le moteur natif, attendue jusqu'au
+    // bout — y compris après un dépassement de délai (voir `exclusive`).
+    return await exclusive(() => completeOnce(ctx, modelPath, options));
   } finally {
     inFlight--;
     scheduleRelease();
   }
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+async function completeOnce(
+  ctx: LlamaContext,
+  modelPath: string,
+  options: CompletionOptions,
+): Promise<string> {
+  // Le gabarit de conversation du modèle d'abord (« jinja »), puis la mise
+  // en forme intégrée à llama.cpp si le gabarit fait échouer le moteur. Une
+  // erreur opaque est d'abord retentée une fois, moteur au repos : c'est le
+  // cas « encore occupé » qui ne doit plus arriver, mais ne coûte rien.
+  const preferred = formatFor.get(modelPath) ?? "jinja";
+  let first: unknown;
+  for (const format of preferred === "jinja" ? (["jinja", "jinja", "plain"] as const) : (["plain", "plain"] as const)) {
+    try {
+      const text = await attempt(ctx, options, format);
+      formatFor.set(modelPath, format);
+      return text;
+    } catch (err) {
+      if (!isEngineCrash(err)) throw err;
+      first ??= err;
+      await sleep(3_000);
+    }
+  }
+  throw new ModelIncompatibleError(first, "aucune mise en forme ne passe");
 }
 
 /** Mise en forme qui fonctionne, par modèle (voir `complete`). */
@@ -246,7 +259,7 @@ const formatFor = new Map<string, "jinja" | "plain">();
 /** Erreur du moteur natif lui-même, et non du contenu de la demande. */
 function isEngineCrash(err: unknown): boolean {
   const message = err instanceof Error ? err.message : String(err);
-  return /HostFunction|chat template|jinja|template/i.test(message);
+  return isOpaqueEngineError(err) || /chat template|jinja|template/i.test(message);
 }
 
 /** Le modèle ne fonctionne avec aucune des deux mises en forme. */
@@ -332,56 +345,6 @@ async function withTimeout<T>(
         timer = setTimeout(() => reject(error()), ms);
       }),
     ]);
-  } finally {
-    if (timer) clearTimeout(timer);
-  }
-}
-
-/**
- * Attend la génération, en l'arrêtant au-delà du délai.
- *
- * `text` vaut `null` si le modèle n'a rien écrit dans le temps imparti ;
- * `error` porte un échec réel du moteur, à distinguer d'un simple dépassement.
- */
-async function raceStop(
-  run: Promise<RawResult>,
-  ms: number,
-  ctx: LlamaContext,
-): Promise<{ text: string | null; error: Error | null; probs: TokenProbs[] | null }> {
-  let failure: Error | null = null;
-  let probs: TokenProbs[] | null = null;
-  // La promesse est neutralisée pour qu'un rejet tardif, après l'expiration,
-  // ne remonte jamais comme rejet non traité.
-  const settled: Promise<string | null> = run.then(
-    (r) => {
-      probs = r.completion_probabilities ?? null;
-      return r.content || r.text || "";
-    },
-    (err) => {
-      failure = err instanceof Error ? err : new Error(String(err));
-      return null;
-    },
-  );
-
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const expired = new Promise<"expired">((resolve) => {
-    timer = setTimeout(() => resolve("expired"), ms);
-  });
-
-  try {
-    const first = await Promise.race([settled, expired]);
-    if (first !== "expired") {
-      return { text: first, error: failure, probs };
-    }
-
-    await ctx.stopCompletion().catch(() => {});
-    // L'arrêt demandé, la génération rend la main avec ce qu'elle avait.
-    const partial = await settled;
-    return {
-      text: partial && partial.trim().length > 0 ? partial : null,
-      error: failure,
-      probs,
-    };
   } finally {
     if (timer) clearTimeout(timer);
   }

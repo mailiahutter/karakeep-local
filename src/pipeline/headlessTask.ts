@@ -1,10 +1,11 @@
 import { AppRegistry } from "react-native";
 
-import { countPendingWork, pendingSnapshot } from "../db/bookmarks";
+import { countPendingWork, pendingSnapshot, retryFailedAnalyses } from "../db/bookmarks";
 import { recordBackgroundRun } from "./heartbeat";
 import { isQueueLockHeld } from "./lock";
 import { isProcessing, processPending } from "./queue";
 import { isCharging } from "../../modules/karakeep-worker/src";
+import { notifyIfUpdateAvailable } from "../update/notify";
 
 /**
  * Travail exécuté par le service au premier plan, sans interface.
@@ -33,6 +34,9 @@ interface SessionData {
 
 export async function runHeadlessSession(data: SessionData = {}): Promise<void> {
   const kind = data.kind ?? "night";
+  // Une correction publiée ne sert à rien tant qu'elle n'est pas installée.
+  const announced = await notifyIfUpdateAvailable().catch(() => null);
+  if (announced) await recordBackgroundRun(`Nouvelle version ${announced} disponible : notification envoyée.`);
   // Deux contextes llama.cpp chargés en même temps, ce sont dix gigaoctets
   // demandés d'un coup : le système en tuerait un. L'interface est
   // prioritaire, elle traite déjà la file.
@@ -48,6 +52,13 @@ export async function runHeadlessSession(data: SessionData = {}): Promise<void> 
       return;
     }
     await new Promise((r) => setTimeout(r, 5_000));
+  }
+
+  // La nuit, sur secteur, les analyses en échec retentent leur chance : une
+  // panne d'un soir ne doit pas condamner un lien pour toujours.
+  if (kind === "night" && isCharging()) {
+    const retried = await retryFailedAnalyses().catch(() => 0);
+    if (retried > 0) await recordBackgroundRun(`${retried} analyse(s) en échec remise(s) en file pour cette nuit.`);
   }
 
   const before = await countPendingWork();

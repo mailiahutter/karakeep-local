@@ -39,6 +39,7 @@ import { ensureOcr } from "./ocr";
 import { ensurePerception } from "./perceive";
 import { recordBackgroundRun } from "./heartbeat";
 import { recordModelFailure, recordModelSuccess } from "../ai/modelHealth";
+import { isOpaqueEngineError } from "../ai/llm";
 import { projectorDescriptor } from "../ai/models";
 import { withPerception } from "../ai/perception";
 import { refreshYtdlpWeekly } from "./ytdlpUpdate";
@@ -59,6 +60,9 @@ import { refreshLearnedCriteria } from "./learnCriteria";
  * `QueueRunner` la relance à chaque retour au premier plan, et une tâche
  * WorkManager (voir `background.ts`) la reprend application fermée.
  */
+
+/** Pannes du moteur d'affilée avant d'arrêter l'analyse (voir `runTagStage`). */
+const ENGINE_FAILURE_LIMIT = 3;
 
 export type QueueEvent =
   | { type: "idle" }
@@ -218,6 +222,11 @@ async function runTagStage(deadline: () => boolean): Promise<number> {
   await refreshLearnedCriteria(modelPath, deadline).catch(() => 0);
   const batch = await pendingBookmarks("ai_status", 10);
   let done = 0;
+  // Pannes du moteur d'affilée. Une panne qui touche tous les liens n'est pas
+  // la faute des liens : après trois, on s'arrête et ils restent en file,
+  // au lieu de passer tous en erreur en quelques secondes comme le 2
+  // novembre.
+  let engineFailures = 0;
 
   for (const stale of batch) {
     if (deadline()) break;
@@ -242,7 +251,7 @@ async function runTagStage(deadline: () => boolean): Promise<number> {
       // s'exécute que s'il reste du temps.
       // Ce que disent la légende, le texte des images, et — si le modèle sait
       // regarder et écouter — ce que montrent les photos et la vidéo.
-      const perception = await ensurePerception(bookmark, model, AI_TIMEOUTS.summary).catch(
+      const perception = await ensurePerception(bookmark, model, AI_TIMEOUTS.perception).catch(
         async (err: Error) => {
           // Visible dans le journal : sans cela, une vision en panne passait
           // pour une analyse normale, rangée à l'aveugle.
@@ -349,7 +358,19 @@ async function runTagStage(deadline: () => boolean): Promise<number> {
 
       await setAiStatus(bookmark.id, "success");
       await recordModelSuccess(model.id);
+      engineFailures = 0;
     } catch (err) {
+      if ((err as Error).name !== "ModelIncompatibleError" && isOpaqueEngineError(err)) {
+        await setAiStatus(bookmark.id, "pending");
+        engineFailures++;
+        if (engineFailures >= ENGINE_FAILURE_LIMIT) {
+          await recordBackgroundRun(
+            `Moteur IA en panne ${engineFailures} fois de suite (${(err as Error).message}) : analyse arrêtée pour cette séance, les liens restent en file.`,
+          );
+          break;
+        }
+        continue;
+      }
       if ((err as Error).name === "ModelIncompatibleError") {
         // Ce n'est pas la faute du lien : il repassera avec un modèle qui
         // fonctionne. Au deuxième échec, on change de modèle et on s'arrête
@@ -357,7 +378,7 @@ async function runTagStage(deadline: () => boolean): Promise<number> {
         await setAiStatus(bookmark.id, "pending");
         const switched = await recordModelFailure(model.id, (err as Error).message);
         await recordBackgroundRun(switched ?? `Échec du moteur avec ${model.label} : ${(err as Error).message}`);
-        if (switched) break;
+        if (switched || ++engineFailures >= ENGINE_FAILURE_LIMIT) break;
         continue;
       }
       // Le rangement et les tags déjà obtenus sont conservés : l'échec d'une

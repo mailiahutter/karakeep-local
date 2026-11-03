@@ -12,8 +12,12 @@
  */
 
 export const MAX_PERCEPTION_CHARS = 1200;
-export const MAX_IMAGES = 3;
-export const MAX_FRAMES = 3;
+// Deux photos et deux images-clés : chaque image coûte ~280 jetons à lire,
+// sur le processeur. À trois et trois, plus le son, la lecture dépassait le
+// délai sur Gemma 4 E4B — et c'est ce dépassement qui a déclenché la panne du
+// 2 novembre.
+export const MAX_IMAGES = 2;
+export const MAX_FRAMES = 2;
 export const MAX_AUDIO_SECONDS = 30;
 
 export const PERCEIVE_SYSTEM_PROMPT =

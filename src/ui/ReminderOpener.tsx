@@ -18,8 +18,11 @@ export function ReminderOpener() {
 
   useEffect(() => {
     const open = (response: Notifications.NotificationResponse | null) => {
-      const id = response?.notification.request.content.data?.bookmarkId;
+      const data = response?.notification.request.content.data;
+      const id = data?.bookmarkId;
       if (typeof id === "string") router.push(`/bookmark/${id}`);
+      // Notification de mise à jour : l'écran qui l'installe.
+      if (data?.route === "/settings/update") router.push("/settings/update");
     };
     // Application lancée par le toucher sur la notification.
     open(Notifications.getLastNotificationResponse());

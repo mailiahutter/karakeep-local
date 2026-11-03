@@ -34,7 +34,7 @@ export const REQUEUE_FETCH = `
 
 export const REQUEUE_AI = `
   UPDATE bookmarks
-     SET ai_status = 'pending', ai_error = NULL
+     SET ai_status = 'pending', ai_error = NULL, ai_attempts = 0
    WHERE archived = 0
      AND (
        fetch_status = 'pending'
@@ -44,6 +44,19 @@ export const REQUEUE_AI = `
                 OR summary IS NULL OR trim(summary) = ''
                 OR subject IS NULL OR trim(subject) = ''))
      )`;
+
+/**
+ * Chaque nuit, sur secteur : les analyses en échec repassent, jusqu'à trois
+ * échecs par lien. Au-delà, le lien attend « Tout relancer » — il y a
+ * sans doute quelque chose dans son contenu que le modèle ne digère pas.
+ */
+export const MAX_AI_ATTEMPTS = 3;
+export const RETRY_AI_ERRORS = `
+  UPDATE bookmarks
+     SET ai_status = 'pending'
+   WHERE archived = 0
+     AND ai_status IN ('error', 'running')
+     AND ai_attempts < ${MAX_AI_ATTEMPTS}`;
 
 /**
  * Revue complète, à la demande : tout ce que l'IA a rangé seule repasse — vue

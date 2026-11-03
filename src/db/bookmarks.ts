@@ -1,7 +1,7 @@
 import * as Crypto from "expo-crypto";
 
 import { getDb } from "./client";
-import { FULL_REVIEW, REQUEUE_AI, REQUEUE_FETCH } from "./requeue.sql";
+import { FULL_REVIEW, REQUEUE_AI, REQUEUE_FETCH, RETRY_AI_ERRORS } from "./requeue.sql";
 import { planRetry, retryMessage } from "../pipeline/retryPlan";
 import { toFtsQuery } from "./fts";
 import { normalizeUrl } from "./urls";
@@ -248,9 +248,11 @@ export async function setAiStatus(
   const db = await getDb();
   await db.runAsync(
     `UPDATE bookmarks SET ai_status = ?, ai_error = ?, updated_at = ?,
-       analysed_at = CASE WHEN ? = 'success' THEN ? ELSE analysed_at END
+       analysed_at = CASE WHEN ? = 'success' THEN ? ELSE analysed_at END,
+       ai_attempts = CASE ? WHEN 'error' THEN ai_attempts + 1
+                            WHEN 'success' THEN 0 ELSE ai_attempts END
      WHERE id = ?`,
-    [status, error ?? null, Date.now(), status, Date.now(), id],
+    [status, error ?? null, Date.now(), status, Date.now(), status, id],
   );
 }
 
@@ -417,6 +419,13 @@ export async function requeueAutoClassified(): Promise<number> {
 export async function requeueFullReview(): Promise<number> {
   const db = await getDb();
   const result = await db.runAsync(FULL_REVIEW);
+  return result.changes;
+}
+
+/** Les analyses en échec repassent (voir `RETRY_AI_ERRORS`). */
+export async function retryFailedAnalyses(): Promise<number> {
+  const db = await getDb();
+  const result = await db.runAsync(RETRY_AI_ERRORS);
   return result.changes;
 }
 
