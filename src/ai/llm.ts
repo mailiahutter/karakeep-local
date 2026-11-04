@@ -178,9 +178,8 @@ export class InferenceTimeoutError extends Error {
   constructor(ms: number) {
     super(
       `Le modèle n'a rien produit en ${Math.round(ms / 1000)} s. ` +
-        "Sur un modèle de 7 milliards de paramètres, une page longue peut " +
-        "dépasser ce délai : un modèle plus léger (Réglages → Modèle IA) est " +
-        "bien plus rapide.",
+        "Un modèle plus léger (Réglages → Modèle IA, Gemma 4 E2B) est " +
+        "environ deux fois plus rapide.",
     );
     this.name = "InferenceTimeoutError";
   }

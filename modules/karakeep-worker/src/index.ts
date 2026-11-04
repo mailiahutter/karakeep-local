@@ -30,9 +30,22 @@ interface KarakeepWorkerNative {
   cookieFor(url: string): string | null;
   extractFrames(videoPath: string, count: number, outDir: string): Promise<string[]>;
   extractAudio(videoPath: string, outPath: string, maxSeconds: number): Promise<string | null>;
+  normalizeImages(paths: string[], outDir: string): Promise<string[]>;
+  exitReasons(): ExitReason[];
+  isWorkerRunning(): boolean;
   ytdlpUpdate(): Promise<string>;
   ytdlpVersion(): Promise<string | null>;
   zip(sources: string[], dest: string): Promise<{ path: string; files: number; bytes: number; size: number }>;
+}
+
+/** Un arrêt de l'application, tel qu'Android l'a noté (Android 11+). */
+export interface ExitReason {
+  at: number;
+  /** Code `ApplicationExitInfo.REASON_*`. */
+  reason: number;
+  description: string;
+  importance: number;
+  pssKb: number;
 }
 
 export interface WorkerDiagnostics {
@@ -273,4 +286,44 @@ export function requestBatteryExemption(): boolean {
   } catch {
     return false;
   }
+}
+
+/** Photos converties en JPEG lisible par le modèle ; les illisibles sont écartées. */
+export async function normalizeImages(paths: string[], outDir: string): Promise<string[]> {
+  if (paths.length === 0) return [];
+  if (typeof native?.normalizeImages !== "function") return paths;
+  return native.normalizeImages(paths, outDir);
+}
+
+/** Derniers arrêts de l'application notés par Android (vide avant Android 11). */
+export function exitReasons(): ExitReason[] {
+  if (typeof native?.exitReasons !== "function") return [];
+  try {
+    return native.exitReasons();
+  } catch {
+    return [];
+  }
+}
+
+/** Libellés des codes `ApplicationExitInfo.REASON_*`. */
+export function exitReasonLabel(code: number): string {
+  const labels: Record<number, string> = {
+    1: "fin normale",
+    2: "arrêt par l'application",
+    3: "manque de mémoire (tuée par Android)",
+    4: "plantage Java",
+    5: "plantage natif",
+    6: "ne répondait plus (ANR)",
+    7: "erreur au démarrage",
+    8: "permission modifiée",
+    9: "trop de ressources",
+    10: "arrêtée par l'utilisateur",
+    11: "arrêtée avec un autre processus",
+    12: "arrêtée par le système",
+    13: "autre",
+    14: "gelée",
+    15: "paquet supprimé",
+    16: "paquet mis à jour",
+  };
+  return labels[code] ?? `code ${code}`;
 }

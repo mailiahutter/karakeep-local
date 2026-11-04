@@ -7,7 +7,15 @@ import { brokenModels } from "../ai/modelHealth";
 import { readBackgroundLog } from "./heartbeat";
 import { connectionKind } from "../ai/download";
 import { currentBuild, currentVersion } from "../update/updater";
-import { isCharging, modeStatus, scheduledWindow, workerDiagnostics, isWorkerAvailable } from "../../modules/karakeep-worker/src";
+import {
+  exitReasonLabel,
+  exitReasons,
+  isCharging,
+  isWorkerAvailable,
+  modeStatus,
+  scheduledWindow,
+  workerDiagnostics,
+} from "../../modules/karakeep-worker/src";
 
 /**
  * Journal à transmettre pour comprendre pourquoi rien n'avance.
@@ -78,6 +86,23 @@ export async function buildDiagnosticReport(): Promise<string> {
     ...(errors.length ? ["", "## Erreurs les plus fréquentes", ...errors.map((e) => `${e.n} × ${e.e ?? "?"}`)] : []),
     "",
     "## Derniers réveils",
-    ...(log.length ? log.slice(0, 40).map((r) => `${fmt(r.at)} — ${r.outcome}`) : ["Aucun réveil enregistré."]),
+    ...(log.length
+      ? log.slice(0, 60).map((r) =>
+          r.repeat && r.since
+            ? `${fmt(r.at)} — ${r.outcome} (×${r.repeat} depuis ${fmt(r.since)})`
+            : `${fmt(r.at)} — ${r.outcome}`,
+        )
+      : ["Aucun réveil enregistré."]),
+    "",
+    "## Arrêts de l'application notés par Android",
+    ...(() => {
+      const exits = exitReasons();
+      return exits.length
+        ? exits.map(
+            (e) =>
+              `${fmt(e.at)} — ${exitReasonLabel(e.reason)}${e.description ? ` (${e.description})` : ""}${e.pssKb ? `, mémoire ${Math.round(e.pssKb / 1024)} Mo` : ""}`,
+          )
+        : ["Aucun (ou Android trop ancien pour le dire)."];
+    })(),
   ].join("\n");
 }

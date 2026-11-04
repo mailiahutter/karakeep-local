@@ -1,5 +1,7 @@
 package expo.modules.karakeepworker
 
+import android.os.Build
+
 import android.content.Context
 import android.net.Uri
 import com.google.mlkit.vision.common.InputImage
@@ -189,6 +191,47 @@ object MediaTools {
       }
     } finally {
       retriever.release()
+    }
+    return out
+  }
+
+  /**
+   * Photos converties en JPEG de 768 px au plus.
+   *
+   * Le lecteur d'images du modèle ne connaît ni le WebP ni le HEIC, formats
+   * courants chez Instagram : le 4 novembre, deux lectures ont échoué sur
+   * « Failed to load media ». Android, lui, les décode tous. Une image
+   * illisible est simplement écartée.
+   */
+  fun normalizeImages(paths: List<String>, outDir: String): List<String> {
+    val dir = File(outDir.removePrefix("file://")).apply { mkdirs() }
+    val out = mutableListOf<String>()
+    paths.forEachIndexed { i, raw ->
+      try {
+        val path = raw.removePrefix("file://")
+        val decoded = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+          android.graphics.ImageDecoder.decodeBitmap(
+            android.graphics.ImageDecoder.createSource(File(path)),
+          ) { decoder, info, _ ->
+            decoder.allocator = android.graphics.ImageDecoder.ALLOCATOR_SOFTWARE
+            val side = maxOf(info.size.width, info.size.height)
+            if (side > 768) {
+              val scale = 768f / side
+              decoder.setTargetSize(
+                (info.size.width * scale).toInt().coerceAtLeast(1),
+                (info.size.height * scale).toInt().coerceAtLeast(1),
+              )
+            }
+          }
+        } else {
+          android.graphics.BitmapFactory.decodeFile(path)
+        } ?: return@forEachIndexed
+        val file = File(dir, "image_$i.jpg")
+        FileOutputStream(file).use { decoded.compress(android.graphics.Bitmap.CompressFormat.JPEG, 85, it) }
+        out.add(file.absolutePath)
+      } catch (e: Exception) {
+        // Format inconnu ou fichier abîmé : on continue sans cette image.
+      }
     }
     return out
   }

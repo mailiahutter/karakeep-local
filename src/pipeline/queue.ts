@@ -346,6 +346,12 @@ async function runTagStage(deadline: () => boolean): Promise<number> {
           timeoutMs: AI_TIMEOUTS.summary,
           onToken: (n) =>
             emit({ type: "generating", step: "summary", tokens: n }),
+        }).catch((err: Error) => {
+          // Le rangement est fait : un résumé trop long à écrire ne le
+          // remet pas en cause. La phrase de l'étape « de quoi ça parle »
+          // le remplace.
+          if (err.name === "InferenceTimeoutError") return null;
+          throw err;
         });
       }
       // Sur une publication courte, il n'y a rien à condenser — mais la phrase

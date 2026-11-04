@@ -63,7 +63,7 @@ TaskManager.defineTask(AI_QUEUE_TASK, async () => {
     const after = await countPendingWork();
     await recordBackgroundRun(
       before === after
-        ? `${before} en attente, aucun n'a pu être traité.`
+        ? `Réveil Android : ${before} analyse(s) en attente, réservées à la nuit sur secteur.`
         : `${before - after} lien${before - after > 1 ? "s traités" : " traité"}, ${after} restant${after > 1 ? "s" : ""}.`,
     );
     return BackgroundTask.BackgroundTaskResult.Success;

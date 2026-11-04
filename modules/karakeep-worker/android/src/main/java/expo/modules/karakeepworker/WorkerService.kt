@@ -40,6 +40,7 @@ class WorkerService : HeadlessJsTaskService() {
     // avant tout démarrage de JavaScript, sous peine d'ANR.
     startInForeground(NOTIFICATION_ID, buildNotification())
     acquireWakeLock()
+    running = true
     return try {
       super.onStartCommand(intent, flags, startId)
     } catch (e: Exception) {
@@ -68,6 +69,7 @@ class WorkerService : HeadlessJsTaskService() {
   private fun isCharging(): Boolean = Power.isCharging(this)
 
   override fun onDestroy() {
+    running = false
     releaseWakeLock()
     super.onDestroy()
   }
@@ -159,6 +161,13 @@ class WorkerService : HeadlessJsTaskService() {
     const val NIGHT_TIMEOUT_MS = 5L * 60L * 60L * 1000L
     const val DAY_TIMEOUT_MS = 20L * 60L * 1000L
     const val WAKE_LOCK_TIMEOUT_MS = NIGHT_TIMEOUT_MS + 10L * 60L * 1000L
+
+    /**
+     * Séance en cours dans ce processus. Remis à faux si Android tue le
+     * processus : c'est ce qui permet au garde de nuit de relancer.
+     */
+    @Volatile
+    var running = false
 
     const val EXTRA_KIND = "kind"
     /** Séance de nuit : jusqu'à ce que tout soit traité, cinq heures au plus. */

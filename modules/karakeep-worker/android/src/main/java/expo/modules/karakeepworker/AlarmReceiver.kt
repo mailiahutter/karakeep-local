@@ -34,6 +34,14 @@ class AlarmReceiver : BroadcastReceiver() {
         Log.w("KarakeepWorker", "Mode Karakeep non activé", e)
       }
     }
+    val isRetry = intent?.getBooleanExtra(AlarmScheduler.EXTRA_RETRY, false) == true
+    // Garde de nuit : une séance déjà en cours, on repasse plus tard. Une
+    // séance tuée par Android (le 4 novembre, vers 4 h 30, sans un mot dans
+    // le journal) est relancée au passage suivant.
+    if (kind == WorkerService.KIND_NIGHT && isRetry && WorkerService.running) {
+      AlarmScheduler.scheduleNightRetry(context)
+      return
+    }
     if (kind == WorkerService.KIND_NIGHT && !Power.isCharging(context)) {
       // Pas encore branché : l'analyse n'a lieu que sur secteur. On repasse
       // dans une demi-heure, jusqu'à 6 h, plutôt que de perdre la nuit pour
@@ -46,6 +54,10 @@ class AlarmReceiver : BroadcastReceiver() {
     try {
       WorkerService.start(context, kind)
       Preferences.saveLastAlarm(context, "ok ($kind)")
+      // Toute la nuit, jusqu'à 7 h, un passage toutes les demi-heures vérifie
+      // que la séance tourne toujours. S'il n'y a plus rien à faire, la
+      // séance relancée s'arrête aussitôt.
+      if (kind == WorkerService.KIND_NIGHT) AlarmScheduler.scheduleNightRetry(context)
     } catch (e: Exception) {
       Log.w("KarakeepWorker", "Démarrage refusé par le système", e)
       Preferences.saveLastAlarm(

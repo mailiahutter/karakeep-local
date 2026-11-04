@@ -84,7 +84,7 @@ object AlarmScheduler {
   private const val RETRY_REQUEST_CODE = 4714
   private const val RETRY_DELAY_MS = 30L * 60L * 1000L
   /** Au-delà de 6 h, inutile : la séance n'aurait plus le temps de rien. */
-  private const val RETRY_LAST_HOUR = 6
+  private const val RETRY_LAST_HOUR = 7
 
   /** Programme un nouvel essai dans une demi-heure ; faux s'il est trop tard. */
   fun scheduleNightRetry(context: Context): Boolean {

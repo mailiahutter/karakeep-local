@@ -4,7 +4,8 @@ import { countPendingWork, pendingSnapshot, retryFailedAnalyses } from "../db/bo
 import { recordBackgroundRun } from "./heartbeat";
 import { isQueueLockHeld } from "./lock";
 import { isProcessing, processPending } from "./queue";
-import { isCharging } from "../../modules/karakeep-worker/src";
+import { exitReasonLabel, exitReasons, isCharging } from "../../modules/karakeep-worker/src";
+import { getDb } from "../db/client";
 import { notifyIfUpdateAvailable } from "../update/notify";
 
 /**
@@ -67,6 +68,9 @@ export async function runHeadlessSession(data: SessionData = {}): Promise<void> 
     return;
   }
 
+  await noteInterruptedSession();
+  await markSession({ kind, at: Date.now() });
+
   const label = kind === "night" ? "Séance de nuit" : kind === "day" ? "Passage de jour" : "Après partage";
   // L'analyse ne tourne que la nuit, sur secteur ; le reste du temps, on lit
   // seulement les pages. Débrancher en pleine nuit l'arrête aussitôt.
@@ -92,6 +96,50 @@ export async function runHeadlessSession(data: SessionData = {}): Promise<void> 
   } catch (err) {
     await recordBackgroundRun(`Séance interrompue : ${(err as Error).message}`);
     throw err;
+  } finally {
+    await markSession(null);
+  }
+}
+
+/**
+ * Séance ouverte et jamais refermée : le processus a été tué en route.
+ *
+ * Le 4 novembre, la séance de nuit s'est arrêtée vers 4 h 30 sans un mot
+ * dans le journal. La séance suivante le constate et dit pourquoi, quand
+ * Android le sait (manque de mémoire le plus souvent).
+ */
+const SESSION_KEY = "session.open";
+
+async function markSession(value: { kind: string; at: number } | null): Promise<void> {
+  try {
+    const db = await getDb();
+    if (value === null) await db.runAsync("DELETE FROM settings WHERE key = ?", [SESSION_KEY]);
+    else
+      await db.runAsync(
+        "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        [SESSION_KEY, JSON.stringify(value)],
+      );
+  } catch {
+    // Diagnostic seulement.
+  }
+}
+
+async function noteInterruptedSession(): Promise<void> {
+  try {
+    const db = await getDb();
+    const row = await db.getFirstAsync<{ value: string }>("SELECT value FROM settings WHERE key = ?", [SESSION_KEY]);
+    if (!row) return;
+    const open = JSON.parse(row.value) as { kind: string; at: number };
+    const exit = exitReasons().find((e) => e.at >= open.at);
+    const at = (ts: number) =>
+      new Date(ts).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+    await recordBackgroundRun(
+      `La séance (${open.kind}) de ${at(open.at)} s'est arrêtée sans finir${
+        exit ? ` — Android, à ${at(exit.at)} : ${exitReasonLabel(exit.reason)}` : ""
+      }. Elle reprend.`,
+    );
+  } catch {
+    // Diagnostic seulement.
   }
 }
 

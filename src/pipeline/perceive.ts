@@ -13,7 +13,7 @@ import {
 } from "../ai/perception";
 import { listAssets } from "../db/assets";
 import { getDb } from "../db/client";
-import { extractAudio, extractFrames } from "../../modules/karakeep-worker/src";
+import { extractAudio, extractFrames, normalizeImages } from "../../modules/karakeep-worker/src";
 
 /** Le modèle peut-il regarder et écouter, et son projecteur est-il là ? */
 export async function canPerceive(model: ModelDescriptor): Promise<string | null> {
@@ -53,9 +53,13 @@ export async function ensurePerception(
   if (!projectorPath) return null;
 
   const assets = await listAssets(bookmark.id);
-  const images = assets.filter((a) => a.kind === "image").slice(0, MAX_IMAGES).map((a) => a.path);
   const video = assets.find((a) => a.kind === "video");
   const work = `${FileSystem.cacheDirectory}perception/${bookmark.id}/`;
+  // En JPEG : le modèle ne lit ni le WebP ni le HEIC d'Instagram.
+  const images = await normalizeImages(
+    assets.filter((a) => a.kind === "image").slice(0, MAX_IMAGES).map((a) => a.path.replace(/^file:\/\//, "")),
+    work.replace(/^file:\/\//, ""),
+  ).catch(() => [] as string[]);
   let frames: string[] = [];
   let audio: string | null = null;
   if (video) {
@@ -71,8 +75,8 @@ export async function ensurePerception(
     return "";
   }
 
-  try {
-    const raw = await complete(
+  const look = (withAudio: boolean) =>
+    complete(
       modelPathFor(model),
       {
         system: PERCEIVE_SYSTEM_PROMPT,
@@ -80,15 +84,23 @@ export async function ensurePerception(
           caption: bookmark.description ?? bookmark.content,
           images: images.length,
           frames: frames.length,
-          audio: !!audio,
+          audio: withAudio && !!audio,
         }),
         images: [...images, ...frames],
-        audio,
+        audio: withAudio ? audio : null,
         maxTokens: 320,
         timeoutMs,
       },
       { projectorPath },
     );
+
+  try {
+    // Un son que le modèle n'arrive pas à lire ne doit pas lui faire perdre
+    // les images : on réessaie sans.
+    const raw = await look(true).catch((err: Error) => {
+      if (!audio || !/Failed to load media/i.test(err.message)) throw err;
+      return look(false);
+    });
     const text = parsePerception(raw) ?? "";
     await saveDescription(bookmark.id, text);
     return text;

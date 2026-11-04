@@ -12,12 +12,15 @@ import { getDb } from "../db/client";
  */
 
 const KEY = "background.log";
-const MAX_ENTRIES = 20;
+const MAX_ENTRIES = 60;
 
 export interface BackgroundRun {
   at: number;
   /** Ce que le réveil a produit, en une ligne lisible. */
   outcome: string;
+  /** Même message répété : nombre de fois, et première fois. */
+  repeat?: number;
+  since?: number;
 }
 
 export async function readBackgroundLog(): Promise<BackgroundRun[]> {
@@ -38,7 +41,13 @@ export async function readBackgroundLog(): Promise<BackgroundRun[]> {
 export async function recordBackgroundRun(outcome: string): Promise<void> {
   try {
     const previous = await readBackgroundLog();
-    const next = [{ at: Date.now(), outcome }, ...previous].slice(0, MAX_ENTRIES);
+    // Un même message répété toute la journée (« analyses réservées à la
+    // nuit ») ne doit pas chasser du journal ce qui s'est passé la nuit.
+    const [last, ...rest] = previous;
+    const next: BackgroundRun[] =
+      last && last.outcome === outcome
+        ? [{ at: Date.now(), outcome, repeat: (last.repeat ?? 1) + 1, since: last.since ?? last.at }, ...rest]
+        : [{ at: Date.now(), outcome }, ...previous].slice(0, MAX_ENTRIES);
     const db = await getDb();
     await db.runAsync(
       "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",

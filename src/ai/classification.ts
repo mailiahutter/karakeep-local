@@ -230,6 +230,9 @@ async function suggest(
   }
 }
 
+/** Certitude donnée au repli « tiroir le plus proche » : sous tout seuil. */
+const SLOW_FALLBACK_CONFIDENCE = 0.2;
+
 export async function analyseBookmark(
   themes: ThemeTree[],
   input: AnalyseInput,
@@ -259,6 +262,9 @@ export async function analyseBookmark(
   const themeOptions = docVector
     ? shortlist(allThemes, docVector, await optionVectors(run, allThemes, themeExamples, "t"), SHORTLIST_SIZE)
     : allThemes;
+  // Trop lent pour répondre à temps : le tiroir le plus proche au sens des
+  // vecteurs, avec une certitude basse — le lien passe par « À vérifier »
+  // au lieu de tomber en erreur et de rester sans rangement.
   const themeChoice = await choose(
     themeOptions,
     document,
@@ -266,7 +272,14 @@ export async function analyseBookmark(
     "theme",
     run,
     themeExamples,
-  );
+  ).catch((err: unknown) => {
+    if ((err as Error).name !== "InferenceTimeoutError" || !docVector) throw err;
+    return {
+      id: themeOptions[0]?.id ?? null,
+      confidence: SLOW_FALLBACK_CONFIDENCE,
+      alternatives: themeOptions.slice(1, 3).map((o) => ({ id: o.id, p: 0 })),
+    } satisfies Choice;
+  });
   // La mémoire des corrections : où l'utilisateur a rangé les liens les plus
   // proches. Elle tranche quand le modèle hésite ou ne choisit rien.
   let decided: { id: string | null; confidence: number | null } = themeChoice;
@@ -323,7 +336,11 @@ export async function analyseBookmark(
     "subtheme",
     run,
     subExamples,
-  );
+  ).catch((err: unknown): Choice => {
+    // Le tiroir est trouvé ; le sous-thème attendra une correction.
+    if ((err as Error).name !== "InferenceTimeoutError") throw err;
+    return { id: null, confidence: null, alternatives: [] };
+  });
 
   return { ...base, themeId, subthemeId: sub.id, suggestion: null };
 }

@@ -93,15 +93,21 @@ export function lockIsHeld(
  */
 export const AI_TIMEOUTS = {
   /** « De quoi ça parle » : une phrase et des mots-clés à produire. */
-  digest: 120_000,
-  /** Un numéro dans une liste de six. Court par nature. */
-  choice: 60_000,
-  summary: 180_000,
+  //
+  // Le 4 novembre, 18 liens sont tombés en erreur sur « rien produit en
+  // 60 s » avec Gemma 4 E4B : la réponse est courte, mais le modèle doit
+  // d'abord lire toute la consigne — tiroirs, critères appris, exemples —
+  // sur le processeur. La nuit, le temps ne manque pas ; un lien en erreur,
+  // si.
+  digest: 240_000,
+  /** Un numéro dans une liste de six, mais une longue consigne à lire avant. */
+  choice: 180_000,
+  summary: 300_000,
   /**
    * Regarder les photos et écouter le son : le plus long, car chaque image
    * est lue sur le processeur avant même que le modèle commence à écrire.
    */
-  perception: 360_000,
+  perception: 480_000,
 } as const;
 
 /**

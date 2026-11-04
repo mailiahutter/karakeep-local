@@ -226,6 +226,36 @@ class KarakeepWorkerModule : Module() {
       }
     }
 
+    /** Photos converties en JPEG lisible par le modèle (WebP, HEIC…). */
+    AsyncFunction("normalizeImages") { paths: List<String>, outDir: String, promise: Promise ->
+      MediaTools.background({ MediaTools.normalizeImages(paths, outDir) }) { r ->
+        r.fold({ promise.resolve(it) }, { promise.reject("ERR_IMAGES", it.message ?: "Images impossibles", it) })
+      }
+    }
+
+    /**
+     * Pourquoi Android a arrêté l'application les dernières fois (Android
+     * 11 et plus) : mémoire, plantage, arrêt par le système… Sans cela, une
+     * séance de nuit tuée ne laisse aucune trace.
+     */
+    Function("exitReasons") {
+      val ctx = appContext.reactContext ?: return@Function emptyList<Map<String, Any>>()
+      if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return@Function emptyList<Map<String, Any>>()
+      val manager = ctx.getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
+      manager.getHistoricalProcessExitReasons(ctx.packageName, 0, 5).map {
+        mapOf(
+          "at" to it.timestamp.toDouble(),
+          "reason" to it.reason,
+          "description" to (it.description ?: ""),
+          "importance" to it.importance,
+          "pssKb" to it.pss.toDouble(),
+        )
+      }
+    }
+
+    /** Une séance tourne-t-elle en ce moment dans le service ? */
+    Function("isWorkerRunning") { WorkerService.running }
+
     /** Son d'une vidéo en WAV 16 kHz mono, pour que le modèle l'« écoute ». */
     AsyncFunction("extractAudio") { videoPath: String, outPath: String, maxSeconds: Int, promise: Promise ->
       MediaTools.background({ MediaTools.extractAudio(videoPath, outPath, maxSeconds) }) { r ->
