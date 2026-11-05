@@ -120,3 +120,17 @@ test("le carrousel garde chaque image une fois, en meilleure résolution", () =>
   assert.equal(picked.length, 2, "deux médias distincts, l'avatar écarté");
   assert.equal(picked[0].width, 1080, "la plus haute résolution est retenue");
 });
+
+test("la page d'erreur d'Instagram n'est pas prise pour la publication", () => {
+  assert.equal(
+    looksLikeLoginWall(
+      "Instagram",
+      "Désolé, cette page n'est pas disponible. Le lien que vous avez suivi est peut-être rompu, ou la page a peut-être été supprimée. Revenir sur Instagram.",
+    ),
+    true,
+  );
+  assert.equal(
+    looksLikeLoginWall(null, "Sorry, this page isn't available. The link you followed may be broken, or the page may have been removed."),
+    true,
+  );
+});

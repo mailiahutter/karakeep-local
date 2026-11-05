@@ -87,6 +87,17 @@ export function looksLikeLoginWall(
     "log in to see",
     "sign up to see",
     "identifiez-vous",
+    // Page d'erreur servie quand Instagram refuse de répondre — y compris
+    // pour une publication bien en ligne. Enregistrée comme contenu, elle
+    // faisait écrire « lien Instagram rompu » à l'IA (retour du 5 novembre).
+    "page isn't available",
+    "page isn’t available",
+    "the link you followed may be broken",
+    "cette page n'est pas disponible",
+    "cette page n’est pas disponible",
+    "lien que vous avez suivi est peut-être rompu",
+    "this content isn't available",
+    "ce contenu n'est pas disponible",
   ];
   if (markers.some((m) => haystack.includes(m))) return true;
   // Une page Instagram réduite à « Instagram » et quelques mots n'a rien servi.

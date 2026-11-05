@@ -545,4 +545,54 @@ export const MIGRATIONS: string[] = [
   UPDATE bookmarks SET ai_status = 'pending', ai_error = NULL
    WHERE ai_status IN ('error', 'running', 'skipped');
   `,
+
+  // 020 — version 3.8 : grande revue, une fois pour toutes.
+  //
+  // Retour du 5 novembre : les rangements sont bien meilleurs, mais il reste
+  // les erreurs de l'ancienne IA, des fiches « lien Instagram rompu » alors
+  // que la publication s'ouvre très bien, et des descriptions qui ne font que
+  // répéter une légende incomplète.
+  //
+  // 1. La page d'erreur d'Instagram (« cette page n'est pas disponible… le
+  //    lien est peut-être rompu ») avait été enregistrée comme contenu : elle
+  //    est effacée, partout où elle apparaît, résumé compris.
+  // 2. Relecture des liens : tout ce qui n'a pas de texte, une publication
+  //    Instagram sans photo ni vidéo, une page d'erreur, une source déclarée
+  //    disparue, un échec.
+  // 3. Tout repasse à l'analyse : les médias sont regardés et écoutés de
+  //    nouveau, la description réécrite à partir de ce qu'ils montrent. Le
+  //    rangement fait à la main ne bouge pas ; celui de l'IA passe par
+  //    « À vérifier ».
+  `
+  UPDATE bookmarks
+     SET content = NULL, description = NULL, summary = NULL, subject = NULL
+   WHERE lower(COALESCE(content, '') || ' ' || COALESCE(description, '') || ' ' || COALESCE(summary, '')) LIKE '%n''est pas disponible%'
+      OR lower(COALESCE(content, '') || ' ' || COALESCE(description, '') || ' ' || COALESCE(summary, '')) LIKE '%n’est pas disponible%'
+      OR lower(COALESCE(content, '') || ' ' || COALESCE(description, '') || ' ' || COALESCE(summary, '')) LIKE '%isn''t available%'
+      OR lower(COALESCE(content, '') || ' ' || COALESCE(description, '') || ' ' || COALESCE(summary, '')) LIKE '%may be broken%'
+      OR lower(COALESCE(content, '') || ' ' || COALESCE(description, '') || ' ' || COALESCE(summary, '')) LIKE '%rompu%';
+
+  UPDATE bookmarks
+     SET fetch_status = 'pending', fetch_attempts = 0, fetch_error = NULL,
+         retry_days = 0, next_fetch_at = NULL, source_gone = 0
+   WHERE archived = 0
+     AND (
+       fetch_status IN ('error', 'running')
+       OR source_gone = 1
+       OR content IS NULL OR length(trim(content)) < 40
+       OR (source_kind = 'instagram'
+           AND NOT EXISTS (SELECT 1 FROM assets a WHERE a.bookmark_id = bookmarks.id
+                             AND a.kind IN ('image', 'video')))
+     );
+
+  UPDATE bookmarks
+     SET ai_status = 'pending', ai_error = NULL, ai_attempts = 0,
+         media_description = NULL
+   WHERE archived = 0;
+
+  UPDATE bookmarks
+     SET force_review = 1, verified_at = NULL
+   WHERE archived = 0
+     AND (theme_source IS NULL OR theme_source <> 'human');
+  `,
 ];

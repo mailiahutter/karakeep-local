@@ -62,5 +62,7 @@ export function parsePerception(raw: string): string | null {
 export function withPerception(content: string | null, perception: string | null | undefined): string | null {
   if (!perception) return content;
   const base = (content ?? "").trim();
-  return `${base}${base ? "\n\n" : ""}Ce que montrent les images et la vidéo :\n${perception}`;
+  // Ce que le modèle a vu et entendu passe en premier : c'est le plus fiable,
+  // et une légende longue ne doit pas le repousser hors de ce qui est lu.
+  return `Ce que montrent les images et la vidéo :\n${perception}${base ? `\n\nLégende de l'auteur :\n${base}` : ""}`;
 }

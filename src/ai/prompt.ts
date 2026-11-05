@@ -246,6 +246,8 @@ Règles :
 - Va droit au fond : ce que dit le document, pas ce qu'il est.
 - N'écris ni « Ce document… », ni « L'article explique… » : entre directement dans le sujet.
 - N'invente rien qui ne soit dans le texte.
+- Quand le document dit ce que montrent les images et la vidéo, appuie-toi d'abord dessus : la légende de l'auteur est souvent incomplète ou hors sujet. Sois concret : produits, lieux, étapes, chiffres, astuces.
+- Ne parle jamais du lien, de la page ou de son chargement.
 
 <DOCUMENT>
 ${body}

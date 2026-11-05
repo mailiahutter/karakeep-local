@@ -124,6 +124,17 @@ class KarakeepWorkerModule : Module() {
     }
 
     /** Sur secteur ? L'analyse par le modèle n'a lieu qu'à cette condition. */
+    /**
+     * Après un partage : renvoie à l'application d'où l'on vient
+     * (Instagram), Karakeep passant derrière elle. Le travail continue dans
+     * le service au premier plan.
+     */
+    Function("returnToPreviousApp") {
+      val activity = appContext.currentActivity ?: return@Function false
+      activity.runOnUiThread { activity.moveTaskToBack(true) }
+      true
+    }
+
     Function("isCharging") {
       Power.isCharging(context)
     }

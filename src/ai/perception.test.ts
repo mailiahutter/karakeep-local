@@ -15,6 +15,9 @@ test("la description est nettoyée, bornée, et rejoint le texte", () => {
   assert.equal(parsePerception("Description : Un harnais en cuir brun pour chien, cousu main."), "Un harnais en cuir brun pour chien, cousu main.");
   assert.equal(parsePerception("ok"), null);
   assert.ok(parsePerception("a".repeat(5000))!.length <= MAX_PERCEPTION_CHARS);
-  assert.equal(withPerception("Légende", "Un chien"), "Légende\n\nCe que montrent les images et la vidéo :\nUn chien");
+  assert.equal(
+    withPerception("Légende", "Un chien"),
+    "Ce que montrent les images et la vidéo :\nUn chien\n\nLégende de l'auteur :\nLégende",
+  );
   assert.equal(withPerception(null, null), null);
 });

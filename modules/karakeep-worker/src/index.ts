@@ -33,6 +33,7 @@ interface KarakeepWorkerNative {
   normalizeImages(paths: string[], outDir: string): Promise<string[]>;
   exitReasons(): ExitReason[];
   isWorkerRunning(): boolean;
+  returnToPreviousApp(): boolean;
   ytdlpUpdate(): Promise<string>;
   ytdlpVersion(): Promise<string | null>;
   zip(sources: string[], dest: string): Promise<{ path: string; files: number; bytes: number; size: number }>;
@@ -326,4 +327,14 @@ export function exitReasonLabel(code: number): string {
     16: "paquet mis à jour",
   };
   return labels[code] ?? `code ${code}`;
+}
+
+/** Revient à l'application d'où vient le partage. Faux si impossible. */
+export function returnToPreviousApp(): boolean {
+  if (typeof native?.returnToPreviousApp !== "function") return false;
+  try {
+    return native.returnToPreviousApp();
+  } catch {
+    return false;
+  }
 }

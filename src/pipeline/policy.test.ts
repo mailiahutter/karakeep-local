@@ -76,7 +76,7 @@ test("une horloge revenue en arrière ne bloque pas définitivement", () => {
 test("le résumé est abandonné quand le modèle traîne", () => {
   // Le classement et les tags ont déjà pris deux minutes : un résumé en
   // ajouterait trois, et le lien suivant n'arriverait jamais.
-  assert.equal(shouldSkipSummary(120_000), true);
+  assert.equal(shouldSkipSummary(13 * 60_000), true);
   assert.equal(shouldSkipSummary(20_000), false);
 });
 

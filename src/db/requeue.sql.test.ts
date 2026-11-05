@@ -116,10 +116,31 @@ test("la nuit, une analyse en échec repasse, jusqu'à trois échecs", () => {
 });
 
 test("la migration 019 relance les analyses en panne du 2 novembre", () => {
-  const db = migrated(MIGRATIONS.length - 1);
+  const db = migrated(19 - 1);
   insert(db, "panne", { ai_status: "error", ai_error: "Analyse incomplète : Cannot read property 'catch' of undefined" });
   insert(db, "rangee", {});
-  db.exec(MIGRATIONS[MIGRATIONS.length - 1]);
+  db.exec(MIGRATIONS[19 - 1]);
   assert.equal(status(db, "panne").ai, "pending");
   assert.equal(status(db, "rangee").ai, "success");
+});
+
+test("la migration 020 efface la page d'erreur d'Instagram et relit, puis réanalyse tout", () => {
+  const db = migrated(20 - 1);
+  insert(db, "erreur-insta", {
+    source_kind: "instagram",
+    content: "Désolé, cette page n'est pas disponible. Le lien que vous avez suivi est peut-être rompu.",
+    summary: "Lien Instagram rompu.",
+  });
+  db.exec("INSERT INTO assets (id, bookmark_id, kind, path, created_at) VALUES ('img', 'erreur-insta', 'image', 'x', 0)");
+  insert(db, "bonne", { content: "Une longue légende tout à fait correcte sur une recette de gâteau." });
+  insert(db, "a-la-main", { content: "Une longue légende tout à fait correcte sur un harnais pour chien.", theme_source: "human" });
+  db.exec(MIGRATIONS[20 - 1]);
+  const row = db.prepare("SELECT content, summary, fetch_status, ai_status FROM bookmarks WHERE id = 'erreur-insta'").get() as Record<string, unknown>;
+  assert.equal(row.content, null);
+  assert.equal(row.summary, null);
+  assert.equal(row.fetch_status, "pending");
+  assert.deepEqual(status(db, "bonne"), { fetch: "success", ai: "pending" });
+  const human = db.prepare("SELECT force_review, ai_status FROM bookmarks WHERE id = 'a-la-main'").get() as Record<string, unknown>;
+  assert.equal(human.ai_status, "pending");
+  assert.equal(human.force_review, 0);
 });

@@ -111,11 +111,13 @@ export const AI_TIMEOUTS = {
 } as const;
 
 /**
- * Au-delà de ce temps passé sur le classement et les tags, le modèle tourne
- * trop lentement sur cet appareil pour qu'un résumé soit raisonnable : trois
- * minutes de plus par lien bloqueraient toute la file.
+ * Au-delà de ce temps passé sur le classement et les tags, le résumé est
+ * sauté. L'analyse ne tourne plus que la nuit : avec Gemma 4 E4B, le seuil
+ * de 100 s faisait sauter presque tous les résumés, et la fiche gardait une
+ * seule phrase — retour du 5 novembre, « il manque une description
+ * précise ».
  */
-export const SUMMARY_BUDGET_MS = 100_000;
+export const SUMMARY_BUDGET_MS = 12 * 60_000;
 
 export function shouldSkipSummary(
   elapsedMs: number,
