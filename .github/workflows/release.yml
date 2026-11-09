@@ -177,12 +177,16 @@ jobs:
               -PKARAKEEP_KEY_ALIAS="${{ secrets.KEY_ALIAS }}" \
               -PKARAKEEP_KEY_PASSWORD="${{ secrets.KEY_PASSWORD }}"
           }
-          if ! build; then
-            echo "::warning::Échec de la construction, nouvel essai de l'empaquetage."
+          # Trois essais, espacés : le 9 novembre, c'est le serveur de Gradle
+          # lui-même qui répondait 504.
+          for attempt in 1 2 3; do
+            if build; then exit 0; fi
+            [ "$attempt" = 3 ] && exit 1
+            echo "::warning::Échec de la construction (essai $attempt), nouvel essai dans $((attempt * 90)) s."
             df -h . || true
             rm -rf app/build/outputs/apk app/build/intermediates/incremental/packageRelease
-            build
-          fi
+            sleep $((attempt * 90))
+          done
 
       - name: Vérifier la signature
         run: |
