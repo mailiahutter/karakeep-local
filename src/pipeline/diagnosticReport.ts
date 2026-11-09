@@ -8,6 +8,7 @@ import { readBackgroundLog } from "./heartbeat";
 import { connectionKind } from "../ai/download";
 import { currentBuild, currentVersion } from "../update/updater";
 import {
+  alarmEvents,
   exitReasonLabel,
   exitReasons,
   isCharging,
@@ -93,6 +94,12 @@ export async function buildDiagnosticReport(): Promise<string> {
             : `${fmt(r.at)} — ${r.outcome}`,
         )
       : ["Aucun réveil enregistré."]),
+    "",
+    "## Réveils programmés (côté Android)",
+    ...(() => {
+      const events = alarmEvents();
+      return events.length ? events.slice(0, 30).map((e) => `${fmt(e.at)} — ${e.text}`) : ["Aucun noté."];
+    })(),
     "",
     "## Arrêts de l'application notés par Android",
     ...(() => {

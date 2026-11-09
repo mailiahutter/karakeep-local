@@ -264,6 +264,30 @@ class KarakeepWorkerModule : Module() {
       }
     }
 
+    /** Signe de vie du traitement, lu par la garde de nuit. */
+    Function("beat") {
+      Preferences.beat(context)
+    }
+
+    /** Derniers réveils et ce qui en a été décidé. */
+    Function("alarmEvents") {
+      Preferences.readAlarmEvents(context).map { mapOf("at" to it.first.toDouble(), "text" to it.second) }
+    }
+
+    /**
+     * Le moteur IA est bloqué : on redémarre l'application. Une séance de
+     * nuit est reprogrammée dans deux minutes, puis le processus s'arrête.
+     */
+    Function("restartSoon") {
+      Preferences.addAlarmEvent(context, "moteur IA bloqué : redémarrage de l'application")
+      AlarmScheduler.scheduleNightRetry(context, AlarmReceiver.RESTART_DELAY_MS)
+      android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+        WorkerService.stop(context)
+        android.os.Process.killProcess(android.os.Process.myPid())
+      }, 1500)
+      true
+    }
+
     /** Une séance tourne-t-elle en ce moment dans le service ? */
     Function("isWorkerRunning") { WorkerService.running }
 

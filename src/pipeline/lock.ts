@@ -1,5 +1,6 @@
 import { getDb } from "../db/client";
 import { lockIsHeld } from "./policy";
+import { nativeBeat } from "../../modules/karakeep-worker/src";
 
 /**
  * Battement de cœur du cycle de traitement, partagé entre le contexte de
@@ -24,6 +25,8 @@ export async function readHeartbeat(): Promise<number | null> {
 }
 
 export async function beat(): Promise<void> {
+  // Lu par la garde de nuit native, même si JavaScript est figé.
+  nativeBeat();
   try {
     const db = await getDb();
     await db.runAsync(

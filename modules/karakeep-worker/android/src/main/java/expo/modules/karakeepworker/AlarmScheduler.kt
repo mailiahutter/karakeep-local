@@ -87,8 +87,8 @@ object AlarmScheduler {
   private const val RETRY_LAST_HOUR = 7
 
   /** Programme un nouvel essai dans une demi-heure ; faux s'il est trop tard. */
-  fun scheduleNightRetry(context: Context): Boolean {
-    val at = System.currentTimeMillis() + RETRY_DELAY_MS
+  fun scheduleNightRetry(context: Context, delayMs: Long = RETRY_DELAY_MS): Boolean {
+    val at = System.currentTimeMillis() + delayMs
     val hour = Calendar.getInstance().apply { timeInMillis = at }.get(Calendar.HOUR_OF_DAY)
     val window = Preferences.readWindow(context)
     // Fenêtre de nuit : de l'heure choisie jusqu'à 6 h (en passant minuit si besoin).
@@ -247,6 +247,38 @@ object Preferences {
     context.getSharedPreferences(FILE, Context.MODE_PRIVATE).getBoolean(MODE_AUTO, false)
 
   private const val LAST_ALARM = "last-alarm"
+  private const val ALARM_HISTORY = "alarm-history"
+  private const val BEAT = "js-beat"
+
+  /**
+   * Les décisions des derniers réveils, nuit comprise. Sans elles, une nuit
+   * sans travail ne laissait aucune trace : on ne savait pas si l'alarme
+   * avait sonné, si le téléphone était branché, ou si la séance avait été
+   * lancée sans jamais démarrer.
+   */
+  fun addAlarmEvent(context: Context, text: String) {
+    val prefs = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+    val line = "${System.currentTimeMillis()}|$text"
+    val previous = prefs.getString(ALARM_HISTORY, "")!!.split("\n").filter { it.isNotBlank() }
+    val next = (listOf(line) + previous).take(30).joinToString("\n")
+    prefs.edit().putString(ALARM_HISTORY, next).apply()
+  }
+
+  fun readAlarmEvents(context: Context): List<Pair<Long, String>> =
+    context.getSharedPreferences(FILE, Context.MODE_PRIVATE).getString(ALARM_HISTORY, "")!!
+      .split("\n").filter { it.isNotBlank() }.mapNotNull {
+        val i = it.indexOf('|')
+        if (i <= 0) null else (it.substring(0, i).toLongOrNull() ?: 0L) to it.substring(i + 1)
+      }
+
+  /** Signe de vie du traitement JavaScript, lisible sans lui. */
+  fun beat(context: Context) {
+    context.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit()
+      .putLong(BEAT, System.currentTimeMillis()).apply()
+  }
+
+  fun lastBeat(context: Context): Long =
+    context.getSharedPreferences(FILE, Context.MODE_PRIVATE).getLong(BEAT, 0L)
 
   fun saveLastAlarm(context: Context, result: String) {
     context.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit()

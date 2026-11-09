@@ -36,8 +36,20 @@ interface SessionData {
 export async function runHeadlessSession(data: SessionData = {}): Promise<void> {
   const kind = data.kind ?? "night";
   // Une correction publiée ne sert à rien tant qu'elle n'est pas installée.
-  const announced = await notifyIfUpdateAvailable().catch(() => null);
-  if (announced) await recordBackgroundRun(`Nouvelle version ${announced} disponible : notification envoyée.`);
+  // Le jour seulement, et jamais plus de 20 s : la requête n'avait pas de
+  // délai, et une nuit sans vrai réseau pouvait la laisser pendre — la
+  // séance n'allait alors pas plus loin, sans un mot dans le journal.
+  if (kind === "night") {
+    // Première trace, avant tout ce qui pourrait attendre : on sait au moins
+    // que la séance a démarré.
+    await recordBackgroundRun(`Séance de nuit : réveil reçu (sur secteur : ${isCharging() ? "oui" : "non"}).`);
+  } else {
+    const announced = await Promise.race([
+      notifyIfUpdateAvailable().catch(() => null),
+      new Promise<null>((r) => setTimeout(() => r(null), 20_000)),
+    ]);
+    if (announced) await recordBackgroundRun(`Nouvelle version ${announced} disponible : notification envoyée.`);
+  }
   // Deux contextes llama.cpp chargés en même temps, ce sont dix gigaoctets
   // demandés d'un coup : le système en tuerait un. L'interface est
   // prioritaire, elle traite déjà la file.

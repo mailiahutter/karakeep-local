@@ -37,9 +37,10 @@ import { listClassificationExamples } from "../db/examples";
 import { withOcr } from "../archive/ocrText";
 import { ensureOcr } from "./ocr";
 import { ensurePerception } from "./perceive";
-import { recordBackgroundRun } from "./heartbeat";
+import { recordBackgroundRun, recordProgress } from "./heartbeat";
 import { recordModelFailure, recordModelSuccess } from "../ai/modelHealth";
 import { isOpaqueEngineError } from "../ai/llm";
+import { restartSoon } from "../../modules/karakeep-worker/src";
 import { projectorDescriptor } from "../ai/models";
 import { withPerception } from "../ai/perception";
 import { refreshYtdlpWeekly } from "./ytdlpUpdate";
@@ -366,6 +367,12 @@ async function runTagStage(deadline: () => boolean): Promise<number> {
       await recordModelSuccess(model.id);
       engineFailures = 0;
     } catch (err) {
+      if ((err as Error).name === "EngineWedgedError") {
+        await setAiStatus(bookmark.id, "pending");
+        await recordBackgroundRun(`${(err as Error).message} Redémarrage de l'application, la séance reprend dans 2 min.`);
+        restartSoon();
+        break;
+      }
       if ((err as Error).name !== "ModelIncompatibleError" && isOpaqueEngineError(err)) {
         await setAiStatus(bookmark.id, "pending");
         engineFailures++;
@@ -396,6 +403,11 @@ async function runTagStage(deadline: () => boolean): Promise<number> {
     emit({ type: "bookmark-updated", bookmarkId: bookmark.id });
     done++;
     emit({ type: "progress", done, total: batch.length });
+    // Une ligne de suivi, remplacée à chaque lien : la nuit se lit d'un coup
+    // d'œil dans le journal, sans en chasser le reste.
+    await recordProgress(
+      `Analyse en cours : ${done} lien(s) traité(s) cette séance, le dernier en ${Math.round((Date.now() - startedAt) / 60_000)} min.`,
+    );
   }
   return done;
 }

@@ -42,6 +42,21 @@ export function exclusive<T>(job: () => Promise<T>): Promise<T> {
   return run;
 }
 
+/** Temps laissé au moteur pour rendre la main une fois l'arrêt demandé. */
+export const STOP_GRACE_MS = 3 * 60_000;
+
+/**
+ * Le moteur ne rend plus la main, même après l'arrêt demandé. Le seul
+ * remède est de redémarrer l'application : la file s'arrête, et le service
+ * natif s'en charge.
+ */
+export class EngineWedgedError extends Error {
+  constructor(ms: number) {
+    super(`Le moteur IA ne répond plus, même ${Math.round(ms / 60_000)} min après l'arrêt demandé.`);
+    this.name = "EngineWedgedError";
+  }
+}
+
 /** Erreur sans message, levée par le code natif de llama.rn. */
 export function isOpaqueEngineError(err: unknown): boolean {
   const message = err instanceof Error ? err.message : String(err);
@@ -58,6 +73,7 @@ export async function raceStop(
   run: Promise<RawResult>,
   ms: number,
   ctx: Stoppable,
+  graceMs: number = STOP_GRACE_MS,
 ): Promise<{ text: string | null; error: Error | null; probs: TokenProbs[] | null }> {
   let failure: Error | null = null;
   let probs: TokenProbs[] | null = null;
@@ -98,7 +114,21 @@ export async function raceStop(
     // l'attend jusqu'au bout : la lecture des images, elle, ne s'interrompt
     // pas, et lancer la demande suivante avant serait trouver le moteur
     // occupé.
-    const partial = await settled;
+    //
+    // Mais pas indéfiniment : un moteur qui ne rend jamais la main figeait
+    // toute la file, et avec elle toutes les séances suivantes, sans un mot
+    // dans le journal. Au-delà de `graceMs`, on le déclare bloqué.
+    let graceTimer: ReturnType<typeof setTimeout> | undefined;
+    const partial = await Promise.race([
+      settled,
+      new Promise<"wedged">((resolve) => {
+        graceTimer = setTimeout(() => resolve("wedged"), graceMs);
+      }),
+    ]);
+    if (graceTimer) clearTimeout(graceTimer);
+    if (partial === "wedged") {
+      return { text: null, error: new EngineWedgedError(graceMs), probs };
+    }
     return {
       text: partial && partial.trim().length > 0 ? partial : null,
       error: failure,

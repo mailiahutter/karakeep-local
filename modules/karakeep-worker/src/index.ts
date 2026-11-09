@@ -34,6 +34,9 @@ interface KarakeepWorkerNative {
   exitReasons(): ExitReason[];
   isWorkerRunning(): boolean;
   returnToPreviousApp(): boolean;
+  beat(): void;
+  alarmEvents(): { at: number; text: string }[];
+  restartSoon(): boolean;
   ytdlpUpdate(): Promise<string>;
   ytdlpVersion(): Promise<string | null>;
   zip(sources: string[], dest: string): Promise<{ path: string; files: number; bytes: number; size: number }>;
@@ -334,6 +337,33 @@ export function returnToPreviousApp(): boolean {
   if (typeof native?.returnToPreviousApp !== "function") return false;
   try {
     return native.returnToPreviousApp();
+  } catch {
+    return false;
+  }
+}
+
+/** Signe de vie pour la garde de nuit native. */
+export function nativeBeat(): void {
+  try {
+    native?.beat?.();
+  } catch {
+    // Diagnostic seulement.
+  }
+}
+
+/** Derniers réveils d'Android et ce qui en a été décidé, du plus récent au plus ancien. */
+export function alarmEvents(): { at: number; text: string }[] {
+  try {
+    return native?.alarmEvents?.() ?? [];
+  } catch {
+    return [];
+  }
+}
+
+/** Moteur IA bloqué : redémarre l'application, séance de nuit reprogrammée. */
+export function restartSoon(): boolean {
+  try {
+    return native?.restartSoon?.() ?? false;
   } catch {
     return false;
   }

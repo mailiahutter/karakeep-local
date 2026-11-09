@@ -219,6 +219,12 @@ export async function complete(
     // Une seule inférence à la fois dans le moteur natif, attendue jusqu'au
     // bout — y compris après un dépassement de délai (voir `exclusive`).
     return await exclusive(() => completeOnce(ctx, modelPath, options));
+  } catch (err) {
+    // Contexte inutilisable : ne plus jamais le réutiliser. Le libérer
+    // attendrait la fin d'une génération qui ne finit pas ; l'application
+    // va être redémarrée.
+    if ((err as Error).name === "EngineWedgedError" && loaded?.ctx === ctx) loaded = null;
+    throw err;
   } finally {
     inFlight--;
     scheduleRelease();

@@ -53,3 +53,11 @@ test("les erreurs natives sans message sont reconnues", () => {
   assert.ok(isOpaqueEngineError(new Error("Unknown error")));
   assert.ok(!isOpaqueEngineError(new Error("Le modèle n'a rien produit en 60 s.")));
 });
+
+test("un moteur qui ne rend jamais la main est déclaré bloqué au lieu de tout figer", async () => {
+  const never = new Promise<RawResult>(() => {});
+  const out = await raceStop(never, 5, { stopCompletion() {} }, 20);
+  assert.equal(out.error?.name, "EngineWedgedError");
+  // La file reste utilisable.
+  assert.equal(await exclusive(async () => "ensuite"), "ensuite");
+});

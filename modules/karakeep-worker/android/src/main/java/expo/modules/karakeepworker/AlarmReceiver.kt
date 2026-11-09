@@ -35,14 +35,34 @@ class AlarmReceiver : BroadcastReceiver() {
       }
     }
     val isRetry = intent?.getBooleanExtra(AlarmScheduler.EXTRA_RETRY, false) == true
+    val label = when {
+      kind == WorkerService.KIND_DAY -> "jour"
+      isRetry -> "garde de nuit"
+      else -> "nuit"
+    }
+    val charging = Power.isCharging(context)
     // Garde de nuit : une séance déjà en cours, on repasse plus tard. Une
     // séance tuée par Android (le 4 novembre, vers 4 h 30, sans un mot dans
     // le journal) est relancée au passage suivant.
-    if (kind == WorkerService.KIND_NIGHT && isRetry && WorkerService.running) {
-      AlarmScheduler.scheduleNightRetry(context)
+    if (kind == WorkerService.KIND_NIGHT && WorkerService.running) {
+      val lastSign = maxOf(Preferences.lastBeat(context), WorkerService.startedAt)
+      val silentFor = System.currentTimeMillis() - lastSign
+      if (silentFor > FROZEN_AFTER_MS) {
+        // Séance figée : plus aucun signe de vie depuis trois quarts d'heure.
+        // On redémarre l'application ; le prochain passage la relance.
+        Preferences.addAlarmEvent(context, "$label : séance figée depuis ${silentFor / 60000} min, redémarrage")
+        AlarmScheduler.scheduleNightRetry(context, RESTART_DELAY_MS)
+        if (!isRetry) AlarmScheduler.rearm(context)
+        WorkerService.stop(context)
+        android.os.Process.killProcess(android.os.Process.myPid())
+        return
+      }
+      Preferences.addAlarmEvent(context, "$label : séance en cours, rien à faire")
+      if (isRetry) AlarmScheduler.scheduleNightRetry(context) else AlarmScheduler.rearm(context)
       return
     }
-    if (kind == WorkerService.KIND_NIGHT && !Power.isCharging(context)) {
+    if (kind == WorkerService.KIND_NIGHT && !charging) {
+      Preferences.addAlarmEvent(context, "$label : téléphone sur batterie, analyse attendue au branchement")
       // Pas encore branché : l'analyse n'a lieu que sur secteur. On repasse
       // dans une demi-heure, jusqu'à 6 h, plutôt que de perdre la nuit pour
       // un chargeur branché un peu tard.
@@ -54,6 +74,7 @@ class AlarmReceiver : BroadcastReceiver() {
     try {
       WorkerService.start(context, kind)
       Preferences.saveLastAlarm(context, "ok ($kind)")
+      Preferences.addAlarmEvent(context, "$label : séance lancée${if (charging) " (sur secteur)" else ""}")
       // Toute la nuit, jusqu'à 7 h, un passage toutes les demi-heures vérifie
       // que la séance tourne toujours. S'il n'y a plus rien à faire, la
       // séance relancée s'arrête aussitôt.
@@ -64,6 +85,7 @@ class AlarmReceiver : BroadcastReceiver() {
         context,
         "refus ($kind): " + (e.message ?: e.javaClass.simpleName),
       )
+      Preferences.addAlarmEvent(context, "$label : démarrage REFUSÉ par Android (${e.message ?: e.javaClass.simpleName})")
     }
     // Réarmé dans tous les cas : un refus ce soir ne doit pas supprimer la
     // séance de demain.
@@ -74,5 +96,11 @@ class AlarmReceiver : BroadcastReceiver() {
       intent?.getBooleanExtra(AlarmScheduler.EXTRA_RETRY, false) == true -> Unit
       else -> AlarmScheduler.rearm(context)
     }
+  }
+
+  companion object {
+    /** Sans signe de vie depuis ce temps, la séance est tenue pour figée. */
+    const val FROZEN_AFTER_MS = 45L * 60L * 1000L
+    const val RESTART_DELAY_MS = 2L * 60L * 1000L
   }
 }

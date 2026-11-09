@@ -41,6 +41,7 @@ class WorkerService : HeadlessJsTaskService() {
     startInForeground(NOTIFICATION_ID, buildNotification())
     acquireWakeLock()
     running = true
+    startedAt = System.currentTimeMillis()
     return try {
       super.onStartCommand(intent, flags, startId)
     } catch (e: Exception) {
@@ -168,6 +169,10 @@ class WorkerService : HeadlessJsTaskService() {
      */
     @Volatile
     var running = false
+
+    /** Début de la séance en cours : un signe de vie à lui seul. */
+    @Volatile
+    var startedAt = 0L
 
     const val EXTRA_KIND = "kind"
     /** Séance de nuit : jusqu'à ce que tout soit traité, cinq heures au plus. */
